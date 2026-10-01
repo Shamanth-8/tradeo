@@ -1,0 +1,76 @@
+# Core
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv
+
+# Vibe-Trading connector (mcp_server.py). <1.30 matches Vibe-Trading's pin.
+mcp>=1.2,<1.30
+httpx
+
+# Data Fetching (FREE APIs)
+yfinance
+requests
+beautifulsoup4
+lxml
+feedparser
+
+# Database
+aiosqlite
+
+# Columnar storage for the tick lake — the ClickHouse-equivalent, embedded.
+duckdb
+pyarrow
+
+# Live market feed (Dhan WebSocket v2, binary)
+websockets
+
+# Data Processing
+pandas
+scipy
+numpy
+ta
+
+# Machine Learning
+scikit-learn
+joblib
+
+# NLP / Sentiment
+vaderSentiment
+
+# LLM Integration
+# Local: Ollama (free, private) — install from https://ollama.com then
+#   ollama pull hf.co/0xroyce/Plutus-3B:Q4_K_M
+# Optional cloud (OpenRouter / OpenAI / compatible) is called over plain HTTPS (requests),
+#   so no vendor SDK is needed.
+ollama
+
+# Broker integration
+pyotp            # TOTP logins (Angel One, Kotak Neo)
+
+# File uploads (depository statement import)
+python-multipart
+
+# Scheduling
+APScheduler
+
+# Utilities
+python-dateutil
+pytz
+
+# ---- Local voice (default) -------------------------------------------
+# Speech in and out on this machine. Chrome's recogniser streams audio to
+# Google and fails with "network" where that isn't reachable. Models download
+# on first start: Whisper base.en ~140MB, Piper en_GB-alan-medium ~60MB.
+faster-whisper>=1.1
+piper-tts>=1.2
+
+# ---- Optional extras -------------------------------------------------
+#
+# Heavier ML, not required by any current feature:
+# torch
+# transformers
+# xgboost
+# shap
+# chromadb
+# sentence-transformers

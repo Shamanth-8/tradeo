@@ -1,0 +1,539 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --hud-line: rgba(34, 211, 238, 0.16);
+  --hud-line-bright: rgba(34, 211, 238, 0.45);
+  --hud-bg: #050a14;
+  --hud-panel: rgba(17, 26, 43, 0.72);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--hud-bg);
+  color: #e9eef5;
+  line-height: 1.6;
+  overflow-x: hidden;
+  /* Two very large, very soft radial washes read as light bleeding in from
+     off-screen instruments, which is what stops the near-black feeling flat. */
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(34, 211, 238, 0.10), transparent),
+    radial-gradient(ellipse 60% 50% at 100% 100%, rgba(8, 145, 178, 0.07), transparent);
+  background-attachment: fixed;
+}
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: rgba(10, 17, 32, 0.6); }
+::-webkit-scrollbar-thumb {
+  background: rgba(34, 211, 238, 0.22);
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(34, 211, 238, 0.4); }
+
+::selection { background: rgba(34, 211, 238, 0.28); }
+
+@layer components {
+  /* --- Surfaces --------------------------------------------------------- */
+
+  /* The workhorse surface. Every screen is built from these, so the material
+     treatment lives here rather than being reapplied per page.
+
+     Three things turn a rectangle into a floating material:
+       1. translucency + saturation, so what is behind is present not competing
+       2. a bright top edge — how a real surface catches light from above
+       3. shadow depth, which is what actually places it in front of the room */
+  .hud-panel {
+    @apply relative rounded-xl border;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(18px) saturate(150%);
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
+    border-color: rgba(148, 163, 184, 0.12);
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.05),
+      0 8px 32px -12px rgba(0, 0, 0, 0.7);
+  }
+
+  .hud-panel-glow {
+    @apply hud-panel;
+    border-color: rgba(34, 211, 238, 0.22);
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.06),
+      0 8px 32px -12px rgba(0, 0, 0, 0.7),
+      0 0 40px -16px rgba(34, 211, 238, 0.55);
+  }
+
+  /* Corner brackets — the cheapest way to make a rectangle read as a
+     targeting reticle rather than a card. */
+  .hud-corners::before,
+  .hud-corners::after {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-color: var(--hud-line-bright);
+    pointer-events: none;
+  }
+  .hud-corners::before {
+    top: -1px; left: -1px;
+    border-top: 1.5px solid; border-left: 1.5px solid;
+    border-top-left-radius: 6px;
+  }
+  .hud-corners::after {
+    bottom: -1px; right: -1px;
+    border-bottom: 1.5px solid; border-right: 1.5px solid;
+    border-bottom-right-radius: 6px;
+  }
+
+  .hud-grid {
+    background-image:
+      linear-gradient(var(--hud-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--hud-line) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  /* --- Typography ------------------------------------------------------- */
+
+  /* Tracking is size-specific: small uppercase text needs the letters opened
+     up to stay legible, and it needs slightly more weight over a translucent
+     surface or it dissolves into whatever moves behind it. */
+  .hud-label {
+    @apply font-mono text-[10px] uppercase;
+    letter-spacing: 0.18em;
+    color: rgba(103, 232, 249, 0.72);
+    font-weight: 500;
+  }
+
+  .hud-value {
+    @apply font-mono text-dark-50;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.012em;
+  }
+
+  .hud-title {
+    @apply font-mono text-xs uppercase;
+    letter-spacing: 0.2em;
+    color: rgba(165, 243, 252, 0.92);
+    font-weight: 500;
+  }
+
+  /* --- Controls --------------------------------------------------------- */
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2
+           font-mono text-xs uppercase tracking-[0.15em]
+           disabled:cursor-not-allowed disabled:opacity-40;
+    /* 120ms, and only on compositor-friendly properties. Any longer and the
+       press reads as an animation rather than as the control responding. */
+    transition: transform 120ms cubic-bezier(0.2, 0, 0, 1),
+                background-color 160ms ease-out,
+                border-color 160ms ease-out,
+                box-shadow 160ms ease-out;
+    touch-action: manipulation;
+  }
+  /* Acknowledge on press, not on release. Waiting for the click event to give
+     feedback is the single most common reason an interface feels dead. */
+  .btn:active:not(:disabled) { transform: scale(0.97); }
+
+  .btn-primary {
+    @apply btn border border-primary-400/40 bg-primary-500/15 text-primary-200
+           hover:border-primary-400/70 hover:bg-primary-500/25 hover:shadow-glow;
+  }
+
+  .btn-ghost {
+    @apply btn border border-dark-600/60 text-dark-300
+           hover:border-primary-400/40 hover:text-primary-200;
+  }
+
+  .btn-alert {
+    @apply btn border border-alert-400/40 bg-alert-500/15 text-alert-300
+           hover:border-alert-400/70 hover:bg-alert-500/25;
+  }
+
+  .btn-danger {
+    @apply btn border border-danger-400/40 bg-danger-500/15 text-danger-300
+           hover:border-danger-400/70 hover:bg-danger-500/25;
+  }
+
+  .input-field {
+    @apply w-full rounded-md border border-dark-600/70 bg-dark-900/70 px-3.5 py-2.5
+           font-mono text-sm text-dark-50 placeholder-dark-500 outline-none
+           transition-all duration-200
+           focus:border-primary-400/60 focus:shadow-glow;
+  }
+
+  /* --- Data ------------------------------------------------------------- */
+
+  .price-up { @apply text-success-400; }
+  .price-down { @apply text-danger-400; }
+
+  .badge {
+    @apply inline-flex items-center gap-1 rounded border px-2 py-0.5
+           font-mono text-[10px] uppercase tracking-wider;
+  }
+  .badge-primary { @apply badge border-primary-400/35 bg-primary-500/10 text-primary-300; }
+  .badge-success { @apply badge border-success-400/35 bg-success-500/10 text-success-400; }
+  .badge-danger  { @apply badge border-danger-400/35 bg-danger-500/10 text-danger-400; }
+  .badge-alert   { @apply badge border-alert-400/35 bg-alert-500/10 text-alert-300; }
+  .badge-muted   { @apply badge border-dark-600/60 bg-dark-800/60 text-dark-400; }
+
+  /* A thin readout bar — used for scores, weights, conviction. */
+  .meter {
+    @apply relative h-1 w-full overflow-hidden rounded-full bg-dark-800;
+  }
+  .meter-fill {
+    @apply absolute inset-y-0 left-0 rounded-full transition-all duration-700;
+  }
+}
+
+@layer utilities {
+  .text-glow { text-shadow: 0 0 14px rgba(34, 211, 238, 0.55); }
+  .text-glow-soft { text-shadow: 0 0 10px rgba(34, 211, 238, 0.3); }
+
+  /* Fade a scrolling region out at its edges instead of hard-cutting it. */
+  .mask-fade-y {
+    mask-image: linear-gradient(to bottom, transparent, black 6%, black 94%, transparent);
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 6%, black 94%, transparent);
+  }
+  .mask-fade-x {
+    mask-image: linear-gradient(to right, transparent, black 4%, black 96%, transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 4%, black 96%, transparent);
+  }
+}
+
+/* Charts inherit the panel treatment. */
+.tv-lightweight-charts {
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* ---------------------------------------------------------------------------
+   Code editor.
+
+   The palette is chosen against the HUD rather than lifted from a standard
+   theme: cyan is reserved for the system's own voice everywhere else in the
+   app, so it marks `ctx` methods here — the strategy talking to the engine —
+   and never anything else. Comments stay legible instead of being dimmed to
+   near-invisible, because in this library the comments are the teaching.
+   --------------------------------------------------------------------------- */
+.code-editor .tok-keyword  { color: #c084fc; }
+.code-editor .tok-string   { color: #86efac; }
+.code-editor .tok-comment  { color: #64748b; font-style: italic; }
+.code-editor .tok-number   { color: #fbbf24; }
+.code-editor .tok-method   { color: #22d3ee; }
+.code-editor .tok-builtin  { color: #7dd3fc; }
+.code-editor .tok-call     { color: #e2e8f0; }
+.code-editor .tok-const    { color: #f9a8d4; }
+.code-editor .tok-operator { color: #94a3b8; }
+.code-editor .tok-plain    { color: #cbd5e1; }
+
+/* The textarea's own selection must be visible through transparent text. */
+.code-editor textarea::selection { background: rgba(34, 211, 238, 0.3); }
+
+/* Anyone who asks for less motion gets a static HUD — the ambient animation
+   here is decorative, so there's nothing lost by switching it off. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ===========================================================================
+   Materials — translucent layers that convey depth
+   ===========================================================================
+
+   A JARVIS interface should read as glass panels floating over a dark room,
+   not as flat rectangles painted on it. Three things create that:
+
+     1. Translucency + blur, so content behind is *present* but not competing.
+     2. A bright top edge, which is how a real material catches light.
+     3. Shadow depth proportional to surface size — bigger surfaces read as
+        thicker and therefore sit further forward.
+
+   Material weight encodes hierarchy: heavier separates structural regions,
+   lighter draws attention to interactive elements. Never stack a light
+   translucent surface on another — legibility collapses immediately.
+   =========================================================================== */
+
+@layer components {
+  /* Structural — sidebars, the app frame. Heaviest, furthest back. */
+  .material-chrome {
+    background: rgba(8, 14, 26, 0.72);
+    backdrop-filter: blur(24px) saturate(140%);
+    -webkit-backdrop-filter: blur(24px) saturate(140%);
+    border-color: rgba(148, 163, 184, 0.10);
+  }
+
+  /* Content panels. The workhorse. */
+  .material-panel {
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(18px) saturate(150%);
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.05),   /* light on the top edge */
+      0 8px 32px -12px rgba(0, 0, 0, 0.7);
+  }
+
+  /* Raised — cards inside panels. Lighter, so it reads as nearer. */
+  .material-raised {
+    background: rgba(30, 41, 59, 0.48);
+    backdrop-filter: blur(12px) saturate(140%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.06),
+      0 4px 16px -6px rgba(0, 0, 0, 0.6);
+  }
+
+  /* Interactive chips and controls — lightest, most forward. */
+  .material-control {
+    background: rgba(51, 65, 85, 0.42);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.07);
+  }
+
+  /* Attention surface — amber, for anything awaiting a human decision. */
+  .material-attention {
+    background: rgba(69, 45, 8, 0.5);
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    border: 1px solid rgba(251, 191, 36, 0.34);
+    box-shadow:
+      inset 0 1px 0 0 rgba(253, 230, 138, 0.14),
+      0 8px 32px -10px rgba(180, 83, 9, 0.35);
+  }
+
+  /* Vibrancy: text over a blurred surface needs more contrast and a touch
+     more weight than text over a solid one, or it dissolves into whatever is
+     moving behind it. Flat grey is exactly the wrong choice here. */
+  .vibrant          { color: rgba(241, 245, 249, 0.96); font-weight: 450; }
+  .vibrant-secondary{ color: rgba(203, 213, 225, 0.80); font-weight: 420; letter-spacing: 0.006em; }
+  .vibrant-tertiary { color: rgba(148, 163, 184, 0.68); font-weight: 400; letter-spacing: 0.012em; }
+
+  /* Scroll edge effect. A 1px divider under floating chrome is a hard line
+     that says "two documents"; a short fade says "one surface continuing
+     underneath", which is what is actually happening. */
+  .edge-fade-top::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 28px;
+    background: linear-gradient(to bottom, rgba(5, 10, 20, 0.9), transparent);
+    pointer-events: none;
+    z-index: 5;
+  }
+  .edge-fade-bottom::after {
+    content: '';
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 28px;
+    background: linear-gradient(to top, rgba(5, 10, 20, 0.9), transparent);
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  /* Press feedback belongs on pointer-down, not on click. Waiting for release
+     to acknowledge a press is the single most common way an interface feels
+     dead. 100ms is below the threshold where it reads as animation. */
+  .press {
+    transition: transform 100ms cubic-bezier(0.2, 0, 0, 1),
+                background-color 100ms ease-out;
+    touch-action: manipulation;
+  }
+  .press:active { transform: scale(0.972); }
+
+  /* Materialize: a glass surface should *arrive* as a material — blur and
+     scale resolving together — rather than fading in like a decal. */
+  .materialize {
+    animation: materialize 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+@keyframes materialize {
+  from { opacity: 0; transform: scale(0.975) translateY(6px); filter: blur(6px); }
+  to   { opacity: 1; transform: scale(1) translateY(0);      filter: blur(0);   }
+}
+
+/* ---------------------------------------------------------------------------
+   Typography: tracking is size-specific. One letter-spacing value across a
+   scale is wrong somewhere — large text reads too loose, small text too tight.
+   Tighten as size grows; open up slightly at small sizes for legibility.
+   --------------------------------------------------------------------------- */
+@layer components {
+  .type-display  { font-size: clamp(1.75rem, 3.2vw, 2.75rem); line-height: 1.03; letter-spacing: -0.025em; font-weight: 500; }
+  .type-title    { font-size: 1.25rem;  line-height: 1.18; letter-spacing: -0.014em; font-weight: 500; }
+  .type-body     { font-size: 0.875rem; line-height: 1.62; letter-spacing: 0; }
+  .type-caption  { font-size: 0.75rem;  line-height: 1.5;  letter-spacing: 0.008em; }
+  .type-label    { font-size: 0.6875rem; line-height: 1.4; letter-spacing: 0.09em; text-transform: uppercase; font-weight: 500; }
+  /* Numerals must not reflow as they change — tabular figures, always. */
+  .type-numeric  { font-variant-numeric: tabular-nums; letter-spacing: -0.012em; }
+}
+
+/* ---------------------------------------------------------------------------
+   Accessibility. Reduced motion is not "no feedback" — it is gentler feedback.
+   These are three independent signals, so they are handled independently.
+   --------------------------------------------------------------------------- */
+
+@media (prefers-reduced-transparency: reduce) {
+  .material-chrome, .material-panel, .material-raised,
+  .material-control, .material-attention {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .material-chrome    { background: rgb(8, 14, 26); }
+  .material-panel     { background: rgb(15, 23, 42); }
+  .material-raised    { background: rgb(30, 41, 59); }
+  .material-control   { background: rgb(51, 65, 85); }
+  .material-attention { background: rgb(69, 45, 8); }
+}
+
+@media (prefers-contrast: more) {
+  .material-panel, .material-raised, .material-control {
+    border-color: rgba(203, 213, 225, 0.55);
+  }
+  .vibrant-secondary { color: rgb(226, 232, 240); }
+  .vibrant-tertiary  { color: rgb(203, 213, 225); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Keep the opacity change — it still communicates arrival — but drop the
+     travel and the blur, which are the vestibular parts. */
+  .materialize { animation: none; opacity: 1; }
+  .press:active { transform: none; background-color: rgba(148, 163, 184, 0.16); }
+}
+
+/* ===========================================================================
+   Surfaces the newer screens use (they were referenced but never defined, so
+   those panels rendered flat), plus the motion layer: page transitions,
+   staggered entrances, hover lift, shimmer, live pulse and an ambient glow.
+   All motion is disabled under prefers-reduced-motion (bottom of this block).
+   =========================================================================== */
+
+@layer components {
+  .glass-card {
+    @apply relative rounded-xl border border-primary-400/15 bg-dark-900/60 shadow-inner-hud backdrop-blur-md;
+    transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), border-color 220ms ease-out,
+                box-shadow 220ms ease-out;
+    animation: rise 480ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .glass-card:hover {
+    border-color: rgba(34, 211, 238, 0.32);
+    box-shadow: 0 12px 40px -18px rgba(34, 211, 238, 0.35), inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .stat-card {
+    @apply relative overflow-hidden rounded-lg border border-dark-700/70 bg-dark-900/50 px-4 py-3;
+    transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1), border-color 200ms ease-out;
+  }
+  .stat-card::after {
+    /* a soft light sweep on hover */
+    content: "";
+    @apply pointer-events-none absolute inset-0;
+    background: linear-gradient(110deg, transparent 30%, rgba(34, 211, 238, 0.07) 50%, transparent 70%);
+    transform: translateX(-100%);
+    transition: transform 700ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .stat-card:hover { transform: translateY(-2px); border-color: rgba(34, 211, 238, 0.3); }
+  .stat-card:hover::after { transform: translateX(100%); }
+
+  .btn-secondary {
+    @apply btn border border-dark-600/70 bg-dark-800/60 text-dark-200
+           hover:border-primary-400/50 hover:bg-dark-800 hover:text-primary-200;
+  }
+  .btn-success {
+    @apply btn border border-success-400/45 bg-success-500/15 text-success-300
+           hover:border-success-400/75 hover:bg-success-500/25;
+  }
+
+  /* An agent that is ON breathes, so state is readable at a glance. */
+  .live-pulse { animation: livePulse 2.6s ease-in-out infinite; }
+
+  /* Children fade up one after another. */
+  .stagger > * { animation: rise 520ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .stagger > *:nth-child(2) { animation-delay: 60ms; }
+  .stagger > *:nth-child(3) { animation-delay: 120ms; }
+  .stagger > *:nth-child(4) { animation-delay: 180ms; }
+  .stagger > *:nth-child(5) { animation-delay: 240ms; }
+  .stagger > *:nth-child(6) { animation-delay: 300ms; }
+  .stagger > *:nth-child(n+7) { animation-delay: 340ms; }
+
+  /* Table rows ease in too. */
+  tbody > tr { animation: fadeRow 420ms ease-out both; }
+  tbody > tr:nth-child(2) { animation-delay: 30ms; }
+  tbody > tr:nth-child(3) { animation-delay: 60ms; }
+  tbody > tr:nth-child(4) { animation-delay: 90ms; }
+  tbody > tr:nth-child(n+5) { animation-delay: 120ms; }
+  tbody > tr { transition: background-color 160ms ease-out; }
+  tbody > tr:hover { background-color: rgba(34, 211, 238, 0.04); }
+
+  /* Loading placeholders shimmer instead of blinking. */
+  .shimmer {
+    background: linear-gradient(90deg, rgba(30, 41, 59, 0.55) 0%, rgba(51, 65, 85, 0.75) 45%, rgba(30, 41, 59, 0.55) 90%);
+    background-size: 220% 100%;
+    animation: shimmer 1.4s linear infinite;
+  }
+
+  /* Every screen arrives instead of popping in. */
+  .page-enter { animation: pageIn 420ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+  .hud-panel, .hud-panel-glow {
+    transition: border-color 240ms ease-out, box-shadow 240ms ease-out;
+  }
+  .hud-panel:hover { border-color: rgba(34, 211, 238, 0.22); }
+
+  /* Ambient aurora behind everything: slow, faint, compositor-only. */
+  .aurora {
+    @apply pointer-events-none fixed inset-0 z-0;
+    background:
+      radial-gradient(40% 35% at 20% 15%, rgba(34, 211, 238, 0.07), transparent 70%),
+      radial-gradient(35% 30% at 85% 80%, rgba(167, 139, 250, 0.06), transparent 70%),
+      radial-gradient(30% 25% at 70% 20%, rgba(34, 197, 94, 0.04), transparent 70%);
+    animation: aurora 26s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px) scale(0.995); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes fadeRow { from { opacity: 0; transform: translateX(-4px); } to { opacity: 1; transform: none; } }
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(8px); filter: blur(2px); }
+  to   { opacity: 1; transform: none; filter: none; }
+}
+@keyframes shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+@keyframes livePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.0); }
+  50%      { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.12); }
+}
+@keyframes aurora {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(-3%, 2%, 0) scale(1.08); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-card, .stagger > *, tbody > tr, .page-enter { animation: none; }
+  .live-pulse, .aurora, .shimmer { animation: none; }
+  .stat-card:hover { transform: none; }
+}

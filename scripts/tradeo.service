@@ -1,0 +1,45 @@
+[Unit]
+# Always-on Tradeo backend, as a systemd *user* service — no root, no
+# system-wide install. The scanner, watchtower and trigger monitor are
+# scheduled inside the process, so keeping this alive is the whole of
+# "the platform runs itself".
+Description=Tradeo backend (scanner, watchtower, autopilot)
+Documentation=file:%h/tradeo/README.md
+After=network-online.target
+Wants=network-online.target
+
+# Assumes the repo is cloned to ~/tradeo; change the %h/tradeo paths if not.
+# Install:  cp scripts/tradeo.service ~/.config/systemd/user/
+#           systemctl --user daemon-reload && systemctl --user enable --now tradeo
+# The unit refuses to start rather than half-run if the folder is missing.
+AssertPathIsDirectory=%h/tradeo/backend
+
+# Restart always, but rate-limited: a crash loop against a broker API earns
+# a ban.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=exec
+
+WorkingDirectory=%h/tradeo/backend
+
+ExecStart=%h/tradeo/backend/venv/bin/python \
+    -m uvicorn main:app --host 127.0.0.1 --port 8000
+
+# A trading loop that dies at 09:20 and stays dead until someone notices is
+# worse than one that never started.
+Restart=always
+RestartSec=10
+
+# Ollama has to be reachable before the first inference; the backend warms the
+# model in a background thread, so a slow start here is normal.
+TimeoutStartSec=180
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+StandardOutput=append:%h/tradeo/data/backend.log
+StandardError=append:%h/tradeo/data/backend.log
+
+[Install]
+WantedBy=default.target

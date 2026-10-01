@@ -1,0 +1,73 @@
+# Tradeo — containerised deployment.
+#
+#   docker compose up -d
+#
+# Ollama runs as a sibling container so the local brain works out of the box.
+# On first start, pull the model:
+#
+#   docker compose exec ollama ollama pull qwen2.5:3b
+#
+# Configuration and keys come from backend/.env (copy backend/.env.example).
+# A 3B model needs ~4GB RAM; see the README for larger models.
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: tradeo-ollama
+    volumes:
+      - ollama-models:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    container_name: tradeo-backend
+    depends_on:
+      ollama:
+        condition: service_started
+    # Every setting and key (brokers, Telegram, optional OpenRouter) is read
+    # from here; nothing is baked into the image.
+    env_file:
+      - ./backend/.env
+    environment:
+      # Reach the sibling container rather than the host's loopback.
+      OLLAMA_BASE_URL: http://ollama:11434
+      BACKEND_HOST: 0.0.0.0
+      APP_ENV: ${APP_ENV:-production}
+    volumes:
+      # The database and caches outlive the container.
+      - ./database:/app/database
+      - ./data:/app/data
+      - ./config:/app/config
+    ports:
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    container_name: tradeo-frontend
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:5173:80"
+    restart: unless-stopped
+
+volumes:
+  ollama-models:

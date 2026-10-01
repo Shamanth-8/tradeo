@@ -1,0 +1,36 @@
+# ---- Secrets: never commit ---------------------------------------------------
+.env
+backend/.env
+backend/research/.env
+config/credentials.json
+
+# ---- Runtime data (created by the app) -----------------------------------------
+/database/*.db
+/database/*.db-*
+/data/
+
+# ---- Python ----------------------------------------------------------------------
+backend/venv/
+backend/research/.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+/logs/
+backend/logs/
+*.log
+*.pid
+
+# ---- Node --------------------------------------------------------------------------
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# ---- Editors / OS --------------------------------------------------------------------
+.~lock.*#
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.tmp
+*.bak

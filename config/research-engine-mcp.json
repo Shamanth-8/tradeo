@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "tradeo": {
+      "command": "<path-to-tradeo>/backend/venv/bin/python",
+      "args": [
+        "<path-to-tradeo>/backend/mcp_server.py"
+      ],
+      "env": {
+        "TRADEO_URL": "http://127.0.0.1:8000"
+      },
+      "enabledTools": [
+        "tradeo_daily_pick",
+        "tradeo_candidates",
+        "tradeo_quote",
+        "tradeo_brokers",
+        "tradeo_positions",
+        "tradeo_performance"
+      ],
+      "toolTimeout": 300
+    }
+  },
+  "_comment": "Reference only: Tradeo writes the real version (with your paths) to ~/.vibe-trading/agent.json when the research engine starts."
+}

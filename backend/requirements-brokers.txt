@@ -1,0 +1,7 @@
+# Optional extras for specific brokers. Zerodha, Dhan and Angel One need
+# nothing beyond requirements.txt.
+#
+#   ./venv/bin/pip install -r requirements-brokers.txt
+
+# Kotak Neo — official SDK v3 (github.com/Kotak-Neo/kotak-neo-python)
+kotakneoapi>=3.0

@@ -1,0 +1,37 @@
+{
+  "app": {
+    "name": "Tradeo - AI Stock Trading Assistant",
+    "version": "1.0.0",
+    "theme": "dark"
+  },
+  "data": {
+    "update_schedule": "daily",
+    "historical_data_years": 5,
+    "cache_enabled": true
+  },
+  "apis": {
+    "newsapi_key": "",
+    "alpha_vantage_key": "",
+    "reddit_client_id": "",
+    "reddit_client_secret": ""
+  },
+  "ml": {
+    "models_path": "./data/models/",
+    "auto_retrain": true,
+    "retrain_frequency": "weekly"
+  },
+  "llm": {
+    "provider": "ollama",
+    "model": "qwen2.5:3b",
+    "api_base": "http://localhost:11434"
+  },
+  "paper_trading": {
+    "starting_capital": 1000000,
+    "commission_per_trade": 0
+  },
+  "alerts": {
+    "enable_desktop_notifications": true,
+    "enable_email": false,
+    "email_address": ""
+  }
+}
