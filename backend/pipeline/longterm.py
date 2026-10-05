@@ -66,15 +66,11 @@ def _fundamentals(symbols: list[str]) -> dict[str, dict[str, Any]]:
             return cached["data"]
     except (OSError, ValueError, KeyError):
         pass
-    import yfinance as yf
+    from market import data as market_data
 
     data: dict[str, dict[str, Any]] = {}
     for s in symbols:
-        try:
-            info = yf.Ticker(s + ".NS").info
-        except Exception as exc:
-            log.info("no fundamentals for %s: %s", s, exc)
-            info = {}
+        info = market_data.info(s + ".NS")  # {} when Yahoo has nothing
         data[s] = {"roe": info.get("returnOnEquity"), "debt_to_equity": info.get("debtToEquity"),
                    "earnings_growth": info.get("earningsGrowth"), "revenue_growth": info.get("revenueGrowth"),
                    "pe": info.get("trailingPE"), "name": info.get("shortName"), "roe_source": "yahoo"}

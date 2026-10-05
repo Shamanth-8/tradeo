@@ -98,19 +98,12 @@ def history(symbol: str, period: str = "5y", interval: str = "1d",
         if cached and now - cached[0] < _ttl():
             return cached[1]
 
-    try:
-        import yfinance as yf
-    except ImportError as exc:  # pragma: no cover
-        raise DataError("yfinance is not installed") from exc
-
     suffix = ".BO" if exchange.upper() == "BSE" else ".NS"
     ticker = symbol if "." in symbol else f"{symbol}{suffix}"
 
-    try:
-        frame = yf.Ticker(ticker).history(period=period, interval=interval,
-                                          auto_adjust=True)
-    except Exception as exc:
-        raise DataError(f"could not fetch {symbol}: {exc}") from exc
+    from market import data
+
+    frame = data.history(ticker, period=period, interval=interval, auto_adjust=True)
 
     if frame is None or frame.empty:
         raise DataError(

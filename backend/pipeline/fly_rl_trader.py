@@ -38,7 +38,8 @@ log = logging.getLogger("tradeo.fly_rl")
 
 SOURCE = "fly-rl"
 LIVE_SLOTS = 5          # fly-rl positions open at once
-CONVICTION = 50         # sizes each at half the position cap (2.5% of equity)
+CONVICTION = 50
+POSITION_PCT = 10.0     # ceiling per position; actual size is set by risk (autopilot/risk.py)
 HORIZON_DAYS = 7        # calendar days ≈ the 5 trading days it was trained on
 VETO_PERCENTILE = 50.0  # approve only openings the fly ranks in the top half
 EXPLORE = 0.10          # chance a vetoed opening is taken anyway, to learn from
@@ -116,8 +117,10 @@ def _notify(text: str) -> None:
 
         if bot.enabled:
             bot.send(text)
-    except Exception as exc:
-        log.warning("fly-rl telegram failed: %s", exc)
+    except Exception as exc:  # alerts are best effort
+        from core import failures
+
+        failures.record("telegram.fly-rl", exc, log)
 
 
 # ---- on / off -------------------------------------------------------------------
@@ -383,7 +386,7 @@ def consider_openings(candidates: list, scanner_only: list | None = None) -> dic
                     result = triggers.arm(
                         symbol=c.symbol, entry_price=plan["entry"], stop_loss=plan["stop"],
                         target=plan["target"], conviction=CONVICTION, source=SOURCE,
-                        reason=reason, horizon_days=HORIZON_DAYS)
+                        reason=reason, horizon_days=HORIZON_DAYS, max_position_pct=POSITION_PCT)
                     if result.get("ok"):
                         payload.setdefault("pending", {})[str(result["id"])] = \
                             phi[index[c.symbol]].tolist()
@@ -479,7 +482,7 @@ def scan_now() -> dict[str, Any]:
         from lowlatency.ingest import synthetic as feed
 
         synthetic = feed.status().get("running", False)
-    except Exception:
+    except ImportError:
         pass
     if not (hours.is_open() or synthetic):
         return {"started": False, "error": f"NSE is {hours.phase()} — trades would fill at stale prices"}
@@ -520,7 +523,7 @@ def status(agent=None, payload=None) -> dict[str, Any]:
         "live_wins": board["wins"],
         "live_realised_pnl": board["realised_pnl"],
         "scoreboard": board,
-        "rules": {"slots": LIVE_SLOTS, "position_pct": 2.5, "approve_percentile": VETO_PERCENTILE,
+        "rules": {"slots": LIVE_SLOTS, "position_pct": POSITION_PCT, "approve_percentile": VETO_PERCENTILE,
                   "explore": EXPLORE, "hold_days": HORIZON_DAYS},
         "backtest": {"passed": report.get("passed"),
                      "fly_rl_net_annualised_pct":
@@ -569,21 +572,13 @@ def _daily_summary() -> None:
     )
 
 
-def start() -> None:
-    """Backstop learning every minute, and the end-of-day summary."""
+def tick() -> None:
+    """Called every minute by autopilot/scheduler.py: backstop learning, and the end-of-day summary."""
     from market import hours
 
-    def loop() -> None:
-        while True:
-            try:
-                on_trade_closed()
-                now = hours.now_ist()
-                if (now.weekday() < 5 and (now.hour, now.minute) >= SUMMARY_AT
-                        and now.date() not in _summarised and enabled()):
-                    _summarised.add(now.date())
-                    _daily_summary()
-            except Exception as exc:
-                log.warning("fly-rl loop: %s", exc)
-            time.sleep(60)
-
-    threading.Thread(target=loop, name="fly-rl", daemon=True).start()
+    on_trade_closed()
+    now = hours.now_ist()
+    if (now.weekday() < 5 and (now.hour, now.minute) >= SUMMARY_AT
+            and now.date() not in _summarised and enabled()):
+        _summarised.add(now.date())
+        _daily_summary()

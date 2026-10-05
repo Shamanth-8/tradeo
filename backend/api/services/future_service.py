@@ -3,6 +3,7 @@ Future You Portfolio Simulator Service
 Monte Carlo simulations to project portfolio evolution over 1/5/10 years.
 """
 
+import sqlite3
 import sys
 import os
 import numpy as np
@@ -255,8 +256,10 @@ class FutureService:
             )
             conn.commit()
             conn.close()
-        except Exception:
-            pass
+        except (sqlite3.Error, KeyError, TypeError, ValueError) as exc:  # history is a nice-to-have; the result is still returned
+            from core import failures
+
+            failures.record("history.future-you", exc)
 
 
 # Singleton

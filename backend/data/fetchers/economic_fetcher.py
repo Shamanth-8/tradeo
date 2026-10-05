@@ -4,7 +4,7 @@ Fetches: India VIX, Crude Oil, USD/INR, FII/DII, Nifty breadth, etc.
 All from FREE sources (yfinance, NSE)
 """
 
-import yfinance as yf
+from market import data as market_data
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
@@ -41,8 +41,7 @@ class EconomicFetcher:
     def get_india_vix(self) -> Dict[str, Any]:
         """Get India VIX (fear gauge)."""
         try:
-            vix = yf.Ticker("^INDIAVIX")
-            hist = vix.history(period="5d")
+            hist = market_data.history("^INDIAVIX", period="5d")
             if hist.empty:
                 return {"error": "No VIX data available"}
 
@@ -63,8 +62,7 @@ class EconomicFetcher:
     def get_crude_oil(self) -> Dict[str, Any]:
         """Get crude oil price (Brent)."""
         try:
-            oil = yf.Ticker("BZ=F")  # Brent Crude
-            hist = oil.history(period="5d")
+            hist = market_data.history("BZ=F", period="5d")  # Brent Crude
             if hist.empty:
                 return {"error": "No crude oil data"}
 
@@ -88,8 +86,7 @@ class EconomicFetcher:
     def get_usd_inr(self) -> Dict[str, Any]:
         """Get USD/INR exchange rate."""
         try:
-            fx = yf.Ticker("USDINR=X")
-            hist = fx.history(period="5d")
+            hist = market_data.history("USDINR=X", period="5d")
             if hist.empty:
                 return {"error": "No USD/INR data"}
 
@@ -108,8 +105,7 @@ class EconomicFetcher:
     def get_gold_price(self) -> Dict[str, Any]:
         """Get gold price (international)."""
         try:
-            gold = yf.Ticker("GC=F")
-            hist = gold.history(period="5d")
+            hist = market_data.history("GC=F", period="5d")
             if hist.empty:
                 return {"error": "No gold data"}
 
@@ -128,8 +124,7 @@ class EconomicFetcher:
     def get_nifty_data(self) -> Dict[str, Any]:
         """Get Nifty 50 index data."""
         try:
-            nifty = yf.Ticker("^NSEI")
-            hist = nifty.history(period="5d")
+            hist = market_data.history("^NSEI", period="5d")
             if hist.empty:
                 return {"error": "No Nifty data"}
 
@@ -165,8 +160,10 @@ class EconomicFetcher:
                     "source": "NSE",
                     "timestamp": datetime.now().isoformat(),
                 }
-        except Exception:
-            pass
+        except Exception as exc:  # NSE blocks scrapers often; fall back below
+            from core import failures
+
+            failures.record("nse.fii-dii", exc)
 
         # Fallback: return placeholder structure
         return {
@@ -210,8 +207,7 @@ class EconomicFetcher:
 
         for symbol in nifty_stocks[:20]:  # Check top 20 for speed
             try:
-                ticker = yf.Ticker(f"{symbol}.NS")
-                hist = ticker.history(period="3mo")
+                hist = market_data.history(f"{symbol}.NS", period="3mo")
                 if len(hist) >= 50:
                     sma_50 = hist["Close"].rolling(50).mean().iloc[-1]
                     current = hist["Close"].iloc[-1]

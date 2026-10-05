@@ -350,9 +350,9 @@ def decide(symbol: str, verify: bool = False, use_llm: bool = True) -> Decision:
     # 2. Volatility and the exit plan, from the same price and history.
     history = None
     try:
-        import yfinance as yf
+        from market import data
 
-        history = yf.Ticker(f"{symbol}.NS").history(period="3mo", interval="1d")
+        history = data.history(f"{symbol}.NS", period="3mo", interval="1d")
     except Exception as exc:
         log.debug("history unavailable for %s: %s", symbol, exc)
 
@@ -514,16 +514,18 @@ class Simulation:
             from brokers.registry import registry
 
             symbols = [r["symbol"] for r in registry.consolidated_holdings()["holdings"]]
-        except Exception:
-            pass
+        except Exception as exc:  # no broker data → simulate on the scan list instead
+            from core import failures
+
+            failures.record("simulation.holdings", exc)
 
         if len(symbols) < 8:
             try:
                 from market.universe import scan_list
 
                 symbols += [s for s in scan_list(limit=12) if s not in symbols]
-            except Exception:
-                pass
+            except (ImportError, KeyError) as exc:
+                log.debug("scan list unavailable: %s", exc)
         return symbols[:20]
 
     def start(self, interval_seconds: int = 120) -> dict[str, Any]:

@@ -653,7 +653,7 @@ class Watchtower:
                         from lowlatency.ingest import synthetic
 
                         synthetic_running = synthetic.status().get("running", False)
-                    except Exception:
+                    except ImportError:
                         pass
 
                     if hours.is_open() or synthetic_running or settings.scan_off_hours:

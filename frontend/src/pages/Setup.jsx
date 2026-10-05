@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { HudPanel, Empty, Loading, ErrorNote } from '../components/hud/HudPanel'
 import ConnectionStatus from '../components/ConnectionStatus'
+import FailureCounts from '../components/FailureCounts'
 import BrokerConnections from '../components/BrokerConnections'
 import { aiApi, setupApi } from '../services/api'
 import useVoice from '../hooks/useVoice'
@@ -134,6 +135,8 @@ export default function Setup() {
               actually have when something says not connected.
             */}
             <ConnectionStatus />
+
+            <FailureCounts />
 
             {/*
               The old "System readiness" grid lived here. It was removed rather

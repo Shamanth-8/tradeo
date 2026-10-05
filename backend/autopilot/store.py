@@ -323,7 +323,9 @@ def execute_paper(
     """
     from . import costs
 
-    price = costs.fill_price(price, side, product)
+    # Slippage grows with the order's share of the stock's daily trading.
+    price = costs.fill_price(price, side, product, order_value=quantity * price,
+                             daily_value=costs.daily_traded_value(symbol))
     value = quantity * price
     fees = costs.charges(value, side, product)
     conn = get_db_connection()
@@ -464,4 +466,7 @@ def reset_paper(capital: float = STARTING_CAPITAL) -> dict[str, Any]:
         conn.commit()
     finally:
         conn.close()
+    from . import risk
+
+    risk.reset()
     return {"reset": True, "capital": capital}

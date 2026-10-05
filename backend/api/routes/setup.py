@@ -204,6 +204,20 @@ async def checklist() -> dict[str, Any]:
     }
 
 
+@router.get("/failures")
+async def failure_counts() -> dict[str, Any]:
+    """
+    Every part that failed since the backend started: data sources, news,
+    the cloud verifier, each agent's scheduled run. A part that recovered
+    shows as "degraded"; one whose latest attempt failed as "failing".
+    """
+    from core import failures
+
+    counts = failures.snapshot()
+    return {"components": counts,
+            "failing": [name for name, c in counts.items() if c["state"] == "failing"]}
+
+
 @router.get("/diagnostics")
 async def diagnostics() -> dict[str, Any]:
     """

@@ -19,8 +19,6 @@ source meets the same checks.
 from __future__ import annotations
 
 import logging
-import threading
-import time
 from typing import Any
 
 log = logging.getLogger("tradeo.daily_pick")
@@ -102,7 +100,7 @@ def _reason(signal) -> str:
 def run(force: bool = False) -> dict[str, Any]:
     """Choose and paper-trade today's picks, by the rules set on the Autopilot page."""
     from api.routes.bridge import refresh_candidates
-    from autopilot import agents, store, triggers
+    from autopilot import agents, triggers
     from market import hours
     from realtime.scanner import _score_one
 
@@ -122,7 +120,6 @@ def run(force: bool = False) -> dict[str, Any]:
     held = set(triggers.open_symbols())
     considered: list[dict[str, Any]] = []
     opened: list[dict[str, Any]] = []
-    equity = float(store.paper_account()["equity"])
 
     for row in ranking["rows"]:
         if len(existing) + len(opened) >= wanted:
@@ -151,12 +148,12 @@ def run(force: bool = False) -> dict[str, Any]:
             continue
 
         reason = f"{_reason(signal)} | news: {guard['why']}"[:400]
-        quantity = int(equity * float(rules["position_pct"]) / 100 // plan["entry"])
         # `arm`, not `arm_from_signal`: the conviction bar there is for the
         # model-scored watchtower. This pick's bar is min_score, applied above.
+        # Sized by risk inside arm(); position_pct is the ceiling.
         result = triggers.arm(
             symbol=symbol, entry_price=plan["entry"], stop_loss=plan["stop"],
-            target=plan["target"], quantity=quantity or None, conviction=signal.score,
+            target=plan["target"], max_position_pct=float(rules["position_pct"]), conviction=signal.score,
             source=SOURCE, reason=reason,
         )
         result.update({"ranker": ranking["ranker"], "score": round(signal.score, 1),
@@ -186,35 +183,29 @@ def _announce(result: dict[str, Any]) -> None:
                 f"{result['quantity']} @ ₹{result['entry_price']:,.2f} · stop ₹{result['stop_loss']:,.2f}"
                 f" · target ₹{result['target']:,.2f}\n{result['reason']}"
             )
-    except Exception as exc:
-        log.warning("could not announce the pick: %s", exc)
+    except Exception as exc:  # alerts are best effort; the trade is already booked
+        from core import failures
+
+        failures.record("telegram.daily-pick", exc, log)
 
 
 # Days already tried, so a refused day is not retried every minute.
 _attempted: dict = {}
 
 
-def start() -> None:
-    """Fire once each trading day at the set time IST, when switched on."""
+def tick() -> None:
+    """Called every minute by autopilot/scheduler.py: fires once a trading day at the set time IST."""
     from autopilot import agents
     from market import hours
 
-    def loop() -> None:
-        while True:
-            rules = agents.daily_pick_settings()
-            now = hours.now_ist()
-            run_at = tuple(int(x) for x in rules["run_at"].split(":"))
-            due = (rules["enabled"] and hours.is_open() and (now.hour, now.minute) >= run_at
-                   and now.date() not in _attempted)
-            if due and len(_picked_today()) < int(rules["picks_per_day"]):
-                try:
-                    outcome = run()
-                    log.info("pick of the day: %s", outcome.get("symbol") or outcome.get("error"))
-                except Exception as exc:
-                    log.warning("pick of the day failed: %s", exc)
-                # One attempt per day: a refused day stays refused rather than
-                # retrying into worse prices all afternoon.
-                _attempted[now.date()] = True
-            time.sleep(60)
-
-    threading.Thread(target=loop, name="daily-pick", daemon=True).start()
+    rules = agents.daily_pick_settings()
+    now = hours.now_ist()
+    run_at = tuple(int(x) for x in rules["run_at"].split(":"))
+    due = (rules["enabled"] and hours.is_open() and (now.hour, now.minute) >= run_at
+           and now.date() not in _attempted)
+    if due and len(_picked_today()) < int(rules["picks_per_day"]):
+        # One attempt per day, marked first: a refused or failed day stays
+        # refused rather than retrying into worse prices all afternoon.
+        _attempted[now.date()] = True
+        outcome = run()
+        log.info("pick of the day: %s", outcome.get("symbol") or outcome.get("error"))

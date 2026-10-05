@@ -3,12 +3,16 @@ Stock Data Fetcher using yfinance (Yahoo Finance)
 Primary data source for NSE/BSE stocks
 """
 
-import yfinance as yf
+import logging
+
+from market import data as market_data
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 
 from data.cache import cached, is_error
+
+log = logging.getLogger("tradeo.data")
 
 # How long each kind of data stays usable. Prices go stale in seconds;
 # a company's balance sheet does not change between two page loads.
@@ -32,11 +36,7 @@ class StockFetcher:
         get_stock_info, get_fundamentals and get_live_price all need the same
         payload — without this they each made their own network round trip.
         """
-        try:
-            return yf.Ticker(full_symbol).info or {}
-        except Exception as e:
-            print(f"Error fetching info for {full_symbol}: {e}")
-            return {}
+        return market_data.info(full_symbol)
 
     def get_symbol(self, symbol: str, exchange: str = "NSE") -> str:
         """Add exchange suffix to symbol."""
@@ -110,13 +110,12 @@ class StockFetcher:
             end_date: End date (YYYY-MM-DD format)
         """
         full_symbol = self.get_symbol(symbol, exchange)
-        ticker = yf.Ticker(full_symbol)
 
         try:
             if start_date and end_date:
-                df = ticker.history(start=start_date, end=end_date, interval=interval)
+                df = market_data.history(full_symbol, start=start_date, end=end_date, interval=interval)
             else:
-                df = ticker.history(period=period, interval=interval)
+                df = market_data.history(full_symbol, period=period, interval=interval)
 
             if df.empty:
                 return pd.DataFrame()
@@ -128,8 +127,8 @@ class StockFetcher:
             df = df.reset_index(drop=True)
 
             return df[["symbol", "date", "open", "high", "low", "close", "volume"]]
-        except Exception as e:
-            print(f"Error fetching historical data for {symbol}: {e}")
+        except (KeyError, ValueError) as e:
+            log.warning("unexpected history shape for %s: %s", symbol, e)
             return pd.DataFrame()
 
     def get_fundamentals(self, symbol: str, exchange: str = "NSE") -> Dict[str, Any]:
@@ -190,11 +189,10 @@ class StockFetcher:
     def get_live_price(self, symbol: str, exchange: str = "NSE") -> Dict[str, Any]:
         """Get current/live price data."""
         full_symbol = self.get_symbol(symbol, exchange)
-        ticker = yf.Ticker(full_symbol)
 
         try:
             # Get intraday data for the most recent price
-            df = ticker.history(period="1d", interval="1m")
+            df = market_data.history(full_symbol, period="1d", interval="1m")
 
             if df.empty:
                 info = self._raw_info(full_symbol)

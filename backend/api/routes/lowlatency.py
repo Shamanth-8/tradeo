@@ -73,10 +73,10 @@ def start_feed(request: FeedStartRequest) -> dict[str, Any]:
     if request.synthetic:
         seeds: dict[str, float] = {}
         try:
-            import yfinance as yf
+            from market import data
 
             for symbol in symbols[:10]:
-                history = yf.Ticker(f"{symbol}.NS").history(period="1d")
+                history = data.history(f"{symbol}.NS", period="1d")
                 if history is not None and not history.empty:
                     seeds[symbol] = float(history["Close"].iloc[-1])
         except Exception as exc:

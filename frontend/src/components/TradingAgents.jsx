@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Brain, CalendarClock, Play, Power, Radar, RefreshCw, TrendingUp, Zap } from 'lucide-react'
+import { Brain, CalendarClock, Play, Power, Radar, RefreshCw, Repeat, TrendingUp, Zap } from 'lucide-react'
 import { HudPanel, Loading } from './hud/HudPanel'
 import { autopilotApi } from '../services/api'
 
 /**
- * The switches: the only two agents allowed to open paper trades on their own.
- * Results are on the Paper Trading page, split by agent.
+ * The switches for every agent that opens paper trades on its own. Every buy
+ * also passes the account-level limits in RiskPanel. Results are on the Paper
+ * Trading page, split by agent.
  */
 
-const ICON = { watchtower: Radar, intraday: Zap, swing: TrendingUp, 'daily-pick': CalendarClock, 'fly-rl': Brain }
+const ICON = { watchtower: Radar, momentum: Repeat, intraday: Zap, swing: TrendingUp, 'daily-pick': CalendarClock, 'fly-rl': Brain }
 const rupees = (v) => `${v >= 0 ? '+' : '−'}₹${Math.abs(Number(v || 0)).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
 
 export default function TradingAgents() {
@@ -41,7 +42,7 @@ export default function TradingAgents() {
     return (
         <HudPanel
             title="Automation"
-            subtitle="Everything starts OFF and trades on paper only. Watchtower scans the market; Intraday, Swing, Daily pick and Fly brain open trades. Each card shows its backtest. Results are on the Paper Trading page."
+            subtitle="Everything starts OFF and trades on paper only. Watchtower scans the market; the others open trades. Each card shows how it tested. Results are on the Paper Trading page."
         >
             <div className="stagger grid gap-4 lg:grid-cols-3">
                 {agents.map((a) => {
@@ -86,7 +87,7 @@ export default function TradingAgents() {
                                         <input type="range" min="1" max="5" step="1" value={s.picks_per_day}
                                             onChange={(e) => setDrafts((d) => ({ ...d, [a.id]: { ...draft, picks_per_day: Number(e.target.value) } }))} className="w-full" />
                                     </Rule>
-                                    <Rule label={`Size: ${s.position_pct}% of account each`}>
+                                    <Rule label={`Max size: ${s.position_pct}% each`} hint="risk sets the actual size">
                                         <input type="range" min="0.5" max="10" step="0.5" value={s.position_pct}
                                             onChange={(e) => setDrafts((d) => ({ ...d, [a.id]: { ...draft, position_pct: Number(e.target.value) } }))} className="w-full" />
                                     </Rule>
@@ -119,10 +120,33 @@ export default function TradingAgents() {
                                                 onChange={(e) => setDrafts((d) => ({ ...d, [a.id]: { ...draft, max_trades_per_day: Number(e.target.value) } }))} className="w-full" />
                                         </Rule>
                                     )}
-                                    <Rule label={`Size: ${s.position_pct}% each`}>
+                                    <Rule label={`Max size: ${s.position_pct}% each`} hint="risk sets the actual size">
                                         <input type="range" min="0.5" max="10" step="0.5" value={s.position_pct}
                                             onChange={(e) => setDrafts((d) => ({ ...d, [a.id]: { ...draft, position_pct: Number(e.target.value) } }))} className="w-full" />
                                     </Rule>
+                                    {dirty && (
+                                        <button disabled={busy === a.id} className="btn-primary col-span-2 text-xs"
+                                            onClick={() => act(a.id, () => autopilotApi.updateAgent(a.id, draft), () => {
+                                                setDrafts((d) => ({ ...d, [a.id]: undefined }))
+                                                return 'Saved.'
+                                            })}>
+                                            Save
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+
+                            {a.id === 'momentum' && (
+                                <div className="grid grid-cols-2 gap-3 text-xs">
+                                    <Rule label={`Holdings: ${s.top}`}>
+                                        <input type="range" min="5" max="15" step="1" value={s.top}
+                                            onChange={(e) => setDrafts((d) => ({ ...d, [a.id]: { ...draft, top: Number(e.target.value) } }))} className="w-full" />
+                                    </Rule>
+                                    <Rule label={`Capital: ${s.capital_pct}% of account`}>
+                                        <input type="range" min="10" max="100" step="5" value={s.capital_pct}
+                                            onChange={(e) => setDrafts((d) => ({ ...d, [a.id]: { ...draft, capital_pct: Number(e.target.value) } }))} className="w-full" />
+                                    </Rule>
+                                    {a.last_rebalance && <p className="col-span-2 text-dark-500">Last rebalance: {a.last_rebalance}</p>}
                                     {dirty && (
                                         <button disabled={busy === a.id} className="btn-primary col-span-2 text-xs"
                                             onClick={() => act(a.id, () => autopilotApi.updateAgent(a.id, draft), () => {
@@ -151,12 +175,12 @@ export default function TradingAgents() {
                                     realised {rupees(r.realised_pnl)}
                                 </span>
                             </div>}
-                            {a.backtest && <p className="text-[11px] text-dark-500">Backtest: {a.backtest}</p>}
+                            {a.backtest && <p className="text-[11px] text-dark-500">Tested: {a.backtest}</p>}
 
                             <div className="flex flex-wrap items-center gap-2">
                                 <button disabled={!a.enabled || busy === a.id} className="btn-secondary flex items-center gap-1.5 text-xs"
                                     onClick={() => act(a.id, () => autopilotApi.runAgent(a.id), (d) =>
-                                        d.ok || d.started ? (d.symbol ? `Bought ${d.symbol}.` : 'Started — decisions appear on Paper Trading.') : d.error)}>
+                                        d.ok || d.started ? (d.symbol ? `Bought ${d.symbol}.` : d.market || 'Started — decisions appear on Paper Trading.') : d.error)}>
                                     {busy === a.id ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />} {a.kind === 'scanner' ? 'Scan now' : 'Run now'}
                                 </button>
                                 <Link to="/paper-trading" className="text-xs text-primary-300 hover:underline">Results on Paper Trading →</Link>

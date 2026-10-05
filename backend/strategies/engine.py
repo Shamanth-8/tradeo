@@ -35,7 +35,7 @@ import numpy as np
 import pandas as pd
 
 from . import metrics as metrics_mod
-from .sandbox import StrategyModule
+from .sandbox import StrategyModule, time_limit
 from .sdk import Context, Order, Position, StrategyError, _Indicators
 
 log = logging.getLogger("tradeo.strategies.engine")
@@ -403,7 +403,8 @@ def run_backtest(
             ctx.cash = cash
             ctx.orders = []
             try:
-                strategy.on_bar(ctx)
+                with time_limit(deadline):
+                    strategy.on_bar(ctx)
             except StrategyError as exc:
                 result.error = f"{exc} (bar {i}, {dates[i]})"
                 break

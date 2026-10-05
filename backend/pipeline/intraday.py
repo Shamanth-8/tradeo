@@ -50,17 +50,14 @@ def universe() -> list[str]:
 
 
 def download(symbols: list[str], period: str = "60d") -> pd.DataFrame:
-    import yfinance as yf
+    from market import data
 
-    raw = yf.download([s + ".NS" for s in symbols], period=period, interval="5m",
-                      auto_adjust=False, group_by="ticker", threads=True, progress=False)
+    raw = data.download([s + ".NS" for s in symbols], period=period, interval="5m", auto_adjust=False)
+    by_ticker = data.split(raw, [s + ".NS" for s in symbols])
     frames = []
     for s in symbols:
-        try:
-            d = raw[s + ".NS"].dropna(how="all")
-        except KeyError:
-            continue
-        if d.empty:
+        d = by_ticker.get(s + ".NS")
+        if d is None:
             continue
         d = d.rename(columns=str.lower).reset_index()
         d = d.rename(columns={d.columns[0]: "ts"})
@@ -204,7 +201,7 @@ def _today_count(conn_rows: str) -> int:
 
 def run_once() -> dict[str, Any]:
     """One scan: buy today's fresh breakouts within the agent's limits."""
-    from autopilot import agents, store, triggers
+    from autopilot import agents, triggers
     from market import hours
     from pipeline import pretrade
 
@@ -225,7 +222,6 @@ def run_once() -> dict[str, Any]:
     setups = scan(bars)
     held = set(triggers.open_symbols())
     traded_today = set()
-    equity = float(store.paper_account()["equity"])
     opened, skipped = [], []
     for s in setups:
         if len(opened) >= room:
@@ -238,10 +234,9 @@ def run_once() -> dict[str, Any]:
             skipped.append({"symbol": s["symbol"], "why": guard["why"]})
             continue
         stop, target = plan(s["price"], s["atr"])
-        quantity = int(equity * float(rules["position_pct"]) / 100 // s["price"])
         result = triggers.arm(
             symbol=s["symbol"], entry_price=s["price"], stop_loss=stop, target=target,
-            quantity=quantity or None, conviction=60, source=SOURCE, product="INTRADAY",
+            max_position_pct=float(rules["position_pct"]), conviction=60, source=SOURCE, product="INTRADAY",
             expires_at_utc=_expires_utc(),
             reason=(f"intraday breakout {s['bar']}: above opening range and VWAP "
                     f"(+{s['above_vwap_pct']}%), volume {s['surge']}x; square-off {SQUARE_OFF:%H:%M}"))
@@ -264,27 +259,18 @@ def _announce(opened: list[dict[str, Any]]) -> None:
             bot.send("⚡ <b>Intraday (paper)</b>\n" + "\n".join(
                 f"BUY {o['symbol']} {o['quantity']} @ ₹{o['entry_price']:,.2f} · stop ₹{o['stop_loss']:,.2f}"
                 f" · target ₹{o['target']:,.2f} · out by {SQUARE_OFF:%H:%M}" for o in opened))
-    except Exception as exc:
-        log.warning("intraday announce failed: %s", exc)
+    except Exception as exc:  # alerts are best effort; the trade is already booked
+        from core import failures
+
+        failures.record("telegram.intraday", exc, log)
 
 
-def start() -> None:
-    """Scan every SCAN_EVERY_SECONDS during the session, while switched on."""
-    import threading
-    import time
-
+def tick() -> None:
+    """Called every SCAN_EVERY_SECONDS by autopilot/scheduler.py: scans during the session, while on."""
     from autopilot import agents
     from market import hours
 
-    def loop() -> None:
-        while True:
-            try:
-                if agents.intraday_settings()["enabled"] and hours.is_open():
-                    outcome = run_once()
-                    if outcome.get("opened"):
-                        log.info("intraday opened %s", outcome["symbol"])
-            except Exception as exc:
-                log.warning("intraday scan failed: %s", exc)
-            time.sleep(SCAN_EVERY_SECONDS)
-
-    threading.Thread(target=loop, name="intraday", daemon=True).start()
+    if agents.intraday_settings()["enabled"] and hours.is_open():
+        outcome = run_once()
+        if outcome.get("opened"):
+            log.info("intraday opened %s", outcome["symbol"])

@@ -23,6 +23,11 @@ and fixes.
    beat random are still welcome — say so on the agent's card.
 5. **Numbers that decide money are computed in code**, never by a language
    model (stops, targets, sizes).
+6. **Market data goes through `market/data.py`** — never call yfinance
+   directly. One place for caching, retries and failure counts.
+7. **Don't hide failures.** If you catch a broad exception to keep running,
+   record it with `core.failures.record(...)` so it shows on the Connections
+   screen. A silent `except Exception: pass` won't be merged.
 
 ## Setting up
 
@@ -56,15 +61,20 @@ at http://localhost:8000/docs).
 
 An agent is a small module in `backend/pipeline/` plus a switch:
 
-1. **Rule + backtest.** Write the rule as plain functions and a `backtest()`
-   that replays it on history, charging `autopilot/costs.py`
-   (`product="INTRADAY"` for same-day trades). Compare against random entries
-   with the same exits, and check year by year (or on a held-out period).
-   `pipeline/intraday.py` and `pipeline/swing.py` are complete examples.
-2. **Live loop.** A `run_once()` that finds setups, calls
+1. **Rule + evaluation.** Write the rule as plain functions, then add it to
+   `pipeline/evaluate.py`: a signal function for bracket strategies
+   (`simulate_brackets`) or a chooser for rebalancing ones
+   (`simulate_rebalance`), plus its no-skill control. That gives CAGR, Sharpe,
+   drawdown and exposure against the Nifty, with real costs. **Choose
+   parameters on the in-sample period (2020–24) only**; report the held-out
+   period (2025+) once, after the rule is fixed. `pipeline/momentum.py` is a
+   complete example.
+2. **Live agent.** A `run_once()` that finds setups, calls
    `pipeline.pretrade.check()` and opens brackets with
-   `autopilot.triggers.arm(..., source="<your-agent>")`, and a `start()` loop
-   that does nothing unless the switch is on. Start it in `backend/main.py`.
+   `autopilot.triggers.arm(..., source="<your-agent>", max_position_pct=...)`
+   (sized by risk; account limits apply automatically), and a `tick()` that
+   does nothing unless the switch is on. Register the tick in
+   `autopilot/scheduler.py`.
 3. **Switch.** Add defaults and a card in `backend/autopilot/agents.py`
    (`describe()` / `update()`) with your backtest text, and a label in
    `api/routes/wealth.py` `AGENTS`. The Autopilot page and the per-agent

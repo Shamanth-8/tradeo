@@ -327,10 +327,9 @@ STRATEGY_DESCRIPTIONS = {
 def _history(symbol: str, period: str = "2y") -> pd.DataFrame | None:
     """Daily bars. Yahoo, because it is free and the app already depends on it."""
     try:
-        import yfinance as yf
+        from market import data
 
-        ticker = yf.Ticker(f"{symbol.upper()}.NS")
-        df = ticker.history(period=period, interval="1d")
+        df = data.history(f"{symbol.upper()}.NS", period=period, interval="1d")
         if df is None or df.empty or len(df) < 60:
             return None
         return df

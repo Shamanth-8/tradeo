@@ -21,10 +21,14 @@ export default function Labs() {
     return (
         <div className="space-y-5">
             <header>
-                <h1 className="font-mono text-lg uppercase tracking-[0.3em] text-primary-300 text-glow">More tools</h1>
+                <h1 className="flex items-center gap-3 font-mono text-lg uppercase tracking-[0.3em] text-primary-300 text-glow">
+                    More tools
+                    <span className="rounded border border-alert-400/40 px-1.5 py-0.5 text-[10px] tracking-[0.15em] text-alert-300">Experimental</span>
+                </h1>
                 <p className="mt-1 text-xs text-dark-400">
-                    Extra and experimental tools. The everyday workflow — Command Deck, Wealth, Watchtower, Analyst,
-                    Autopilot and Paper Trading — is in the sidebar.
+                    Experimental extras: less tested than the core, and their outputs are rough heuristics, not
+                    evidence. They may change or be removed. The core workflow — Command Deck, Wealth, Watchtower,
+                    Analyst, Autopilot and Paper Trading — is in the sidebar.
                 </p>
             </header>
             <div className="stagger grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

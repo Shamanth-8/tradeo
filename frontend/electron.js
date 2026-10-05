@@ -40,6 +40,16 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+    // A page loaded from file:// sends "Origin: null", which the backend's CORS
+    // rule (local origins only) refuses. Present the app as localhost instead.
+    session.defaultSession.webRequest.onBeforeSendHeaders(
+        { urls: ['http://127.0.0.1:*/*', 'http://localhost:*/*'] },
+        (details, callback) => {
+            if (details.requestHeaders.Origin === 'null') details.requestHeaders.Origin = 'http://localhost'
+            callback({ requestHeaders: details.requestHeaders })
+        },
+    )
+
     // Voice needs the microphone. Grant it for the local app only, and refuse
     // everything else rather than prompting for permissions we never use.
     session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {

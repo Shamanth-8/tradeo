@@ -3,6 +3,7 @@ Stock DNA Matching Service
 Match stocks to investor personality like a dating app.
 """
 
+import sqlite3
 import sys
 import os
 from typing import Dict, Any, List
@@ -464,8 +465,10 @@ class DNAService:
             )
             conn.commit()
             conn.close()
-        except Exception:
-            pass
+        except (sqlite3.Error, KeyError, TypeError, ValueError) as exc:  # history is a nice-to-have; the result is still returned
+            from core import failures
+
+            failures.record("history.stock-dna", exc)
 
 
 # Singleton

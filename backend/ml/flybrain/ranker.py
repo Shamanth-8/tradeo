@@ -47,15 +47,14 @@ def active() -> bool:
 
 
 def _prices(symbols: list[str]) -> pd.DataFrame:
-    import yfinance as yf
+    from market import data
 
-    raw = yf.download([s + ".NS" for s in symbols], period=HISTORY, interval="1d",
-                      auto_adjust=True, group_by="ticker", threads=True, progress=False)
+    raw = data.download([s + ".NS" for s in symbols], period=HISTORY, interval="1d")
+    by_ticker = data.split(raw, [s + ".NS" for s in symbols])
     frames = []
     for s in symbols:
-        try:
-            d = raw[s + ".NS"].dropna(how="all")
-        except KeyError:
+        d = by_ticker.get(s + ".NS")
+        if d is None:
             continue
         d = d.rename(columns=str.lower).reset_index().rename(columns={"Date": "date"})
         d["symbol"] = s

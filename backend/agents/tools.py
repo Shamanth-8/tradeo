@@ -58,14 +58,10 @@ def _yf(symbol: str) -> str:
 
 @cached(ttl=900, prefix="agents.history", skip_if=lambda r: r is None or r.empty)
 def history(symbol: str, period: str = "2y", interval: str = "1d") -> pd.DataFrame | None:
-    import yfinance as yf
+    from market import data
 
-    try:
-        frame = yf.Ticker(_yf(symbol)).history(period=period, interval=interval)
-    except Exception as exc:
-        log.warning("history failed for %s: %s", symbol, exc)
-        return None
-    if frame is None or frame.empty:
+    frame = data.history(_yf(symbol), period=period, interval=interval)
+    if frame.empty:
         return None
     return frame
 
@@ -78,13 +74,9 @@ def info(symbol: str) -> dict[str, Any]:
     yfinance's `.info` is a single expensive call, so it is fetched once and
     every tool reads from the same cached copy rather than re-requesting.
     """
-    import yfinance as yf
+    from market import data
 
-    try:
-        return dict(yf.Ticker(_yf(symbol)).info or {})
-    except Exception as exc:
-        log.warning("info failed for %s: %s", symbol, exc)
-        return {}
+    return data.info(_yf(symbol))
 
 
 @cached(ttl=86400, prefix="agents.financials", skip_if=lambda r: not r)
@@ -96,14 +88,14 @@ def financials(symbol: str) -> dict[str, Any]:
     you need several years of earnings to see whether they are growing or just
     volatile.
     """
-    import yfinance as yf
+    from market import data
 
     out: dict[str, Any] = {}
     try:
-        ticker = yf.Ticker(_yf(symbol))
-        income = ticker.income_stmt
-        balance = ticker.balance_sheet
-        cashflow = ticker.cashflow
+        frames = data.statements(_yf(symbol))
+        income = frames.get("income")
+        balance = frames.get("balance")
+        cashflow = frames.get("cashflow")
 
         def series(frame: Any, *names: str) -> list[dict[str, Any]]:
             if frame is None or getattr(frame, "empty", True):

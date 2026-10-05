@@ -85,7 +85,7 @@ class BrokerRegistry:
             from .dhan import auth as dhan_auth
 
             dhan_auth.invalidate()  # a cached token must not outlive a new PIN/TOTP
-        except Exception:
+        except ImportError:
             pass
 
         adapters: dict[str, BrokerAdapter] = {}

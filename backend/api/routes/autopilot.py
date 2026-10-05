@@ -265,12 +265,77 @@ async def stop_monitor() -> dict[str, Any]:
     return {"stopped": True}
 
 
+# ---- evaluation: every strategy against Nifty and no-skill controls -----------
+
+
+@router.get("/evaluation")
+async def evaluation() -> dict[str, Any]:
+    """The latest `python -m pipeline.evaluate` run (in-sample and held-out), or a hint to run it."""
+    from pipeline import evaluate
+
+    return evaluate.latest() or {"results": [], "note": "not run yet — POST /api/autopilot/evaluation/run"}
+
+
+@router.post("/evaluation/run")
+async def run_evaluation() -> dict[str, Any]:
+    """Re-run the evaluation (downloads ~7 years of prices; takes a minute or two)."""
+    from fastapi.concurrency import run_in_threadpool
+
+    from pipeline import evaluate
+
+    return await run_in_threadpool(evaluate.run, True)
+
+
+@router.get("/scheduler")
+async def agent_scheduler() -> dict[str, Any]:
+    """Every agent job: next run, runs, errors."""
+    from autopilot import scheduler
+
+    return scheduler.status()
+
+
+# ---- account-level risk: limits every agent's buy must pass ------------------
+
+
+@router.get("/risk")
+async def risk_status() -> dict[str, Any]:
+    """Daily loss, drawdown, sector exposure, market filter, and whether buys are halted."""
+    from fastapi.concurrency import run_in_threadpool
+
+    from autopilot import risk
+
+    return await run_in_threadpool(risk.status)
+
+
+@router.post("/risk")
+async def update_risk(patch: dict[str, Any]) -> dict[str, Any]:
+    """Change the risk limits (validated against their allowed ranges)."""
+    from fastapi.concurrency import run_in_threadpool
+
+    from autopilot import risk
+
+    try:
+        return await run_in_threadpool(risk.update, patch)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/risk/resume")
+async def resume_buys() -> dict[str, Any]:
+    """Re-allow buys after the drawdown switch tripped."""
+    from fastapi.concurrency import run_in_threadpool
+
+    from autopilot import risk
+
+    return await run_in_threadpool(risk.resume)
+
+
 # ---- the two trading agents: switches and rules ------------------------------
 
 
 @router.get("/agents")
 async def trading_agents() -> list[dict[str, Any]]:
-    """The only agents that open paper trades on their own: Daily pick and Fly brain."""
+    """Every trading agent: switch, rules, record and tested results. All paper only."""
     from fastapi.concurrency import run_in_threadpool
 
     from autopilot import agents
@@ -280,7 +345,7 @@ async def trading_agents() -> list[dict[str, Any]]:
 
 @router.post("/agents/{agent_id}")
 async def update_trading_agent(agent_id: str, patch: dict[str, Any]) -> dict[str, Any]:
-    """Switch an agent on/off, or change the Daily pick's rules."""
+    """Switch an agent on/off, or change its rules (validated)."""
     from fastapi.concurrency import run_in_threadpool
 
     from autopilot import agents
@@ -308,6 +373,10 @@ async def run_trading_agent(agent_id: str) -> dict[str, Any]:
         from pipeline import swing
 
         return await run_in_threadpool(swing.run_once)
+    if agent_id == "momentum":
+        from pipeline import momentum
+
+        return await run_in_threadpool(momentum.rebalance)
     if agent_id in ("fly-rl", "watchtower"):
         from pipeline import fly_rl_trader
 

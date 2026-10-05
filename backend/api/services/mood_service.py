@@ -3,6 +3,7 @@ Market Mood Ring Service
 Detect market emotions (fear, greed, euphoria, panic) in real-time.
 """
 
+import sqlite3
 import sys
 import os
 from typing import Dict, Any, List
@@ -165,8 +166,10 @@ class MoodService:
             )
             conn.commit()
             conn.close()
-        except Exception:
-            pass  # Don't fail if save fails
+        except (sqlite3.Error, KeyError, TypeError, ValueError) as exc:  # history is a nice-to-have; the mood is still returned
+            from core import failures
+
+            failures.record("history.market-mood", exc)
 
 
 # Singleton

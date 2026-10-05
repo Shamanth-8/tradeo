@@ -180,14 +180,14 @@ _INDEX_YAHOO = {
 @router.get("/spot/{underlying}")
 def spot(underlying: str) -> dict[str, Any]:
     """Last price of an option underlying (stock or index), for the options lab."""
-    import yfinance as yf
+    from market import data
 
     name = underlying.strip().upper()
     symbol = _INDEX_YAHOO.get(name, f"{name}.NS")
     try:
-        history = yf.Ticker(symbol).history(period="5d", interval="1d")
+        history = data.history(symbol, period="5d", interval="1d")
         price = float(history["Close"].dropna().iloc[-1])
-    except Exception as exc:
+    except (KeyError, IndexError, ValueError) as exc:
         log.info("no spot for %s (%s): %s", name, symbol, exc)
         raise HTTPException(status_code=404, detail=f"No price for {name}")
     return {"underlying": name, "symbol": symbol, "spot": round(price, 2)}

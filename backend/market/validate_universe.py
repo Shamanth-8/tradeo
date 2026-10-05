@@ -12,7 +12,7 @@ from __future__ import annotations
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
-import yfinance as yf
+from market import data
 
 from market.universe import UNIVERSE
 
@@ -22,7 +22,7 @@ def check(symbol: str) -> tuple[str, bool, str]:
     suffix = ".BO" if entry.get("exchange") == "BSE" else ".NS"
     ticker = f"{symbol}{suffix}"
     try:
-        hist = yf.Ticker(ticker).history(period="5d")
+        hist = data.history(ticker, period="5d")
         if hist.empty:
             return symbol, False, "no price history"
         return symbol, True, f"₹{hist['Close'].iloc[-1]:,.2f}"

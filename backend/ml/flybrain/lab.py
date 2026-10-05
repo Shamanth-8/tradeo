@@ -375,8 +375,8 @@ def run_csv(raw: bytes, filename: str, start_from: str = "live", train_live: boo
             fly_rl_trader._event("trained", f"live brain trained on {filename}: "
                                             f"{counts['trades']} trades, win rate "
                                             f"{result['summary']['win_rate']}%")
-        except Exception:
-            pass
+        except (ImportError, KeyError) as exc:
+            log.debug("could not log the training event: %s", exc)
 
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
     (RUNS_DIR / f"{run_id}.json").write_text(json.dumps(result))

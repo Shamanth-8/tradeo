@@ -97,7 +97,18 @@ def test_pretrade_blocks_bad_news(monkeypatch):
     bad = [{"title": "Fraud probe widens, shares crash on terrible loss and default fears"}]
     monkeypatch.setattr(nf.news_fetcher, "fetch_latest_news", lambda keywords=[]: bad)
     result = pretrade.check("WIPRO", 64)
-    assert result["ok"] is False and result["why"].startswith("bad news")
+    assert result["ok"] is False and result["why"].startswith("red-flag news")
+
+
+def test_one_gloomy_headline_does_not_block(monkeypatch):
+    """The news check is a minor filter: a single negative-sounding headline is too noisy to veto a trade."""
+    from data.fetchers import news_fetcher as nf
+    from pipeline import pretrade
+
+    _no_verifier(monkeypatch)
+    gloomy = [{"title": "Shares slip as weak quarter disappoints, terrible outlook"}]
+    monkeypatch.setattr(nf.news_fetcher, "fetch_latest_news", lambda keywords=[]: gloomy)
+    assert pretrade.check("WIPRO", 64)["ok"] is True
 
 
 # ---- voice ----------------------------------------------------------------------------
@@ -239,7 +250,7 @@ def test_api_agents_and_validation():
 
     client = TestClient(main.app)
     agents = client.get("/api/autopilot/agents").json()
-    assert {a["id"] for a in agents} == {"watchtower", "intraday", "swing", "daily-pick", "fly-rl"}
+    assert {a["id"] for a in agents} == {"watchtower", "momentum", "intraday", "swing", "daily-pick", "fly-rl"}
     bad = client.post("/api/autopilot/agents/daily-pick", json={"min_score": 500})
     assert bad.status_code == 400
 
@@ -251,6 +262,9 @@ def test_new_agents_start_off(agent_store):
     assert agent_store.swing_settings()["enabled"] is False
     with pytest.raises(ValueError):
         agent_store.update("intraday", {"max_trades_per_day": 99})
+    assert agent_store.momentum_settings()["enabled"] is False
+    with pytest.raises(ValueError):
+        agent_store.update("momentum", {"capital_pct": 500})
 
 
 def test_intraday_costs_are_lower_than_delivery():
@@ -261,10 +275,15 @@ def test_intraday_costs_are_lower_than_delivery():
     assert intraday < delivery / 2   # ~0.08% vs ~0.22% in charges (slippage widens the gap further)
 
 
-def test_expiry_compares_utc():
+def test_expiry_compares_utc(paper_db):
     """Expiry used to compare a UTC timestamp with IST local time: brackets died 5.5 h early."""
-    src = open("autopilot/triggers.py").read()
-    assert "< datetime.utcnow()" in src and "< datetime.now()" not in src
+    from datetime import datetime, timedelta, timezone
+
+    paper_db.prices["INFY"] = 1000.0
+    in_an_hour_utc = (datetime.now(timezone.utc) + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+    assert paper_db.triggers.arm("INFY", 1000, 950, 1100, source="test", max_position_pct=10,
+                                 expires_at_utc=in_an_hour_utc)["ok"]
+    assert paper_db.triggers.sweep()["closed"] == []
 
 
 def test_intraday_stop_and_target():
@@ -286,3 +305,32 @@ def test_intraday_scan_finds_a_breakout():
                          "low": [b - 0.3 for b in base], "close": base, "volume": vol})
     setups = intraday.scan(bars)
     assert [s["symbol"] for s in setups] == ["TEST"] and setups[0]["surge"] >= 2
+
+
+# ---- security ----------------------------------------------------------------------------
+
+def test_other_websites_cannot_call_the_api():
+    """CORS used to allow "*": any site open in the browser could read holdings or change keys via localhost."""
+    from fastapi.testclient import TestClient
+
+    import main
+
+    client = TestClient(main.app)
+    evil = client.get("/api/autopilot/agents", headers={"Origin": "https://evil.example"})
+    assert "access-control-allow-origin" not in evil.headers
+    ui = client.get("/api/autopilot/agents", headers={"Origin": "http://localhost:5173"})
+    assert ui.headers.get("access-control-allow-origin") == "http://localhost:5173"
+
+
+def test_strategy_stuck_inside_one_bar_is_stopped():
+    """The time budget used to be checked only between bars; a long loop inside on_bar hung the API."""
+    import time as clock
+
+    from strategies.sandbox import TimeBudgetExceeded, compile_strategy, time_limit
+
+    strategy = compile_strategy("def on_bar(ctx):\n    n = 0\n    while n >= 0:\n        n += 1\n")
+    started = clock.perf_counter()
+    with pytest.raises(TimeBudgetExceeded):
+        with time_limit(clock.perf_counter() + 0.5):
+            strategy.on_bar(None)
+    assert clock.perf_counter() - started < 3

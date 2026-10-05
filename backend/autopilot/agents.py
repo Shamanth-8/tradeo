@@ -1,15 +1,18 @@
 """
 The trading agents, and their switches.
 
-Exactly two agents may open paper trades on their own:
+The agents that may open paper trades on their own:
 
-  daily-pick  once a day, the top bullish stock(s) by Tradeo's scorer, by
-              rules you set here (minimum score, picks per day, size, time)
+  momentum    monthly: holds the top stocks by 3-month momentum
+  swing       daily: volume breakouts, held up to two weeks
+  daily-pick  once a day, the top bullish stock(s) by Tradeo's scorer
+  intraday    every 5 minutes: opening-range breakouts, closed the same day
   fly-rl      the fly brain: judges Watchtower's openings and learns from
               every closed trade
 
-Both trade the same automated paper account; results are split by agent on
-the Paper Trading page. Watchtower itself never trades: it only scans and
+All trade the same automated paper account, and every buy passes the
+account-level risk checks in risk.py; results are split by agent on the
+Paper Trading page. Watchtower itself never trades: it only scans and
 hands its openings to the fly brain.
 
 Everything here starts OFF on a fresh install — Watchtower (all background
@@ -31,15 +34,18 @@ DAILY_PICK_DEFAULTS: dict[str, Any] = {
     "enabled": False,
     "min_score": 60.0,      # the scorer's bullish line; lower = more picks
     "picks_per_day": 1,
-    "position_pct": 2.5,    # of paper equity, per pick
+    "position_pct": 10.0,   # ceiling per pick, % of equity; size is set by risk (autopilot/risk.py)
     "run_at": "09:30",      # IST
 }
 LIMITS = {"min_score": (50.0, 90.0), "picks_per_day": (1, 5), "position_pct": (0.5, 10.0)}
 
 INTRADAY_DEFAULTS: dict[str, Any] = {"enabled": False, "max_open": 3, "max_trades_per_day": 10,
-                                     "position_pct": 2.5}
-SWING_DEFAULTS: dict[str, Any] = {"enabled": False, "max_open": 5, "position_pct": 2.5}
+                                     "position_pct": 10.0}
+SWING_DEFAULTS: dict[str, Any] = {"enabled": False, "max_open": 5, "position_pct": 10.0}
 AGENT_LIMITS = {"max_open": (1, 10), "max_trades_per_day": (1, 30), "position_pct": (0.5, 10.0)}
+
+MOMENTUM_DEFAULTS: dict[str, Any] = {"enabled": False, "top": 10, "capital_pct": 50.0}
+MOMENTUM_LIMITS = {"top": (5, 15), "capital_pct": (10.0, 100.0)}
 
 # Background switches that are not agents. All off by default.
 SWITCH_DEFAULTS = {"watchtower": False}
@@ -74,6 +80,7 @@ def apply_watchtower(on: bool) -> None:
     """
     import logging
 
+    from core import failures
     from core.config import get_settings
 
     log = logging.getLogger("tradeo.agents")
@@ -83,20 +90,20 @@ def apply_watchtower(on: bool) -> None:
         from realtime.engine import watchtower as scanner
         (scanner.start() if on and settings.scanner_enabled else scanner.stop())
         parts.append("scanner")
-    except Exception as exc:
-        log.warning("scanner switch failed: %s", exc)
+    except Exception as exc:  # one loop failing to start must not block the others
+        failures.record("watchtower.scanner", exc, log)
     try:
         from pipeline.watchtower import watchtower as pipeline
         (pipeline.start() if on else pipeline.stop())
         parts.append("pipeline")
-    except Exception as exc:
-        log.warning("watchtower switch failed: %s", exc)
+    except Exception as exc:  # one loop failing to start must not block the others
+        failures.record("watchtower.watchtower", exc, log)
     try:
         from pipeline.simulation import simulation
         (simulation.start(interval_seconds=180) if on else simulation.stop())
         parts.append("simulation")
-    except Exception as exc:
-        log.warning("simulation switch failed: %s", exc)
+    except Exception as exc:  # one loop failing to start must not block the others
+        failures.record("watchtower.simulation", exc, log)
     log.info("watchtower %s (%s)", "ON" if on else "OFF", ", ".join(parts))
 
 
@@ -128,6 +135,30 @@ def _clean_simple(patch: dict[str, Any], allowed: tuple[str, ...]) -> dict[str, 
             if not low <= value <= high:
                 raise ValueError(f"{key} must be between {low:g} and {high:g}")
             out[key] = value if key == "position_pct" else int(value)
+    return out
+
+
+def momentum_settings() -> dict[str, Any]:
+    return {**MOMENTUM_DEFAULTS, **_read().get("momentum", {})}
+
+
+def set_momentum_state(**state: Any) -> None:
+    with _lock:
+        data = _read()
+        data["momentum"] = {**data.get("momentum", {}), **state}
+        _write(data)
+
+
+def _clean_momentum(patch: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    if "enabled" in patch:
+        out["enabled"] = bool(patch["enabled"])
+    for key, (low, high) in MOMENTUM_LIMITS.items():
+        if key in patch and patch[key] is not None:
+            value = float(patch[key])
+            if not low <= value <= high:
+                raise ValueError(f"{key} must be between {low:g} and {high:g}")
+            out[key] = int(value) if key == "top" else value
     return out
 
 
@@ -176,8 +207,11 @@ def describe() -> list[dict[str, Any]]:
 
     from pipeline.watchtower import watchtower as pipeline
 
+    from pipeline import evaluate
+
     dp = daily_pick_settings()
-    intra, sw = intraday_settings(), swing_settings()
+    intra, sw, mom = intraday_settings(), swing_settings(), momentum_settings()
+    tested = {r["name"]: r for r in (evaluate.latest() or {}).get("results", [])}
     fly = fly_rl_trader.status()
     wt = pipeline.status()
     watch_on = switch("watchtower")
@@ -193,6 +227,22 @@ def describe() -> list[dict[str, Any]]:
                     "load, so it's off until you need it."),
             "status": {"sweeping": wt.get("sweep_in_progress"), "runs": wt.get("runs"),
                        "last_run_at": (wt.get("last_run") or {}).get("at")},
+        },
+        {
+            "id": "momentum",
+            "name": "Monthly momentum",
+            "enabled": mom["enabled"],
+            "how": (f"On the first trading day of each month (09:30): holds the top {mom['top']} stocks by "
+                    f"3-month return (latest month skipped) that are above their 200-day average, equal "
+                    f"weight, {mom['capital_pct']:g}% of the account in all. Cash while the Nifty 50 is below "
+                    f"its 200-day average. Names that stay in the list are kept."),
+            "settings": {k: mom[k] for k in ("top", "capital_pct")},
+            "limits": MOMENTUM_LIMITS,
+            "record": _record("momentum"),
+            "last_rebalance": mom.get("last_rebalance"),
+            "backtest": _tested_text(tested.get("Momentum top 10 + market filter"),
+                                     "Run `python -m pipeline.evaluate` to measure it."),
+            "evaluation": tested.get("Momentum top 10 + market filter"),
         },
         {
             "id": "intraday",
@@ -218,8 +268,9 @@ def describe() -> list[dict[str, Any]]:
             "settings": {k: sw[k] for k in ("max_open", "position_pct")},
             "limits": AGENT_LIMITS,
             "record": _record("swing"),
-            "backtest": ("2020–26: +0.19% avg per trade vs −0.02% random, ~220 trades/yr — "
-                         "but better than random in only 3 of 7 years."),
+            "backtest": _tested_text(tested.get("Swing breakout + market filter"),
+                                     "No better than random entries. Run `python -m pipeline.evaluate` for numbers."),
+            "evaluation": tested.get("Swing breakout + market filter"),
         },
         {
             "id": "daily-pick",
@@ -250,6 +301,19 @@ def describe() -> list[dict[str, Any]]:
     ]
 
 
+def _tested_text(result: dict[str, Any] | None, fallback: str) -> str:
+    """One line from pipeline/evaluate.py's latest run: in-sample, then the held-out period."""
+    if not result:
+        return fallback
+
+    def part(label: str, m: dict[str, Any]) -> str:
+        return (f"{label} {m.get('cagr_pct', 0):+.1f}%/yr vs Nifty {m.get('nifty_cagr_pct') or 0:+.1f}%, "
+                f"Sharpe {m.get('sharpe', 0):.2f}, worst drop {m.get('max_drawdown_pct', 0):.0f}%")
+
+    return (f"{part('2020–24:', result['in_sample'])}; held out {part('2025+:', result['holdout'])}. "
+            "Survivorship-biased universe — compare with the controls on the Autopilot page.")
+
+
 def update(agent_id: str, patch: dict[str, Any]) -> dict[str, Any]:
     if agent_id == "watchtower":
         if "enabled" in patch:
@@ -261,6 +325,12 @@ def update(agent_id: str, patch: dict[str, Any]) -> dict[str, Any]:
         with _lock:
             data = _read()
             data[agent_id] = {**data.get(agent_id, {}), **clean}
+            _write(data)
+    elif agent_id == "momentum":
+        clean = _clean_momentum(patch)
+        with _lock:
+            data = _read()
+            data["momentum"] = {**data.get("momentum", {}), **clean}
             _write(data)
     elif agent_id == "daily-pick":
         clean = _clean_daily_pick(patch)

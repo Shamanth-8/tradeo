@@ -347,6 +347,7 @@ export const setupApi = {
     // Live probe of every integration. Runs real network calls in parallel on
     // the server, so give it room.
     diagnostics: () => api.get('/setup/diagnostics', { timeout: 90000 }),
+    failures: () => api.get('/setup/failures'),
     voice: () => api.get('/setup/voice'),
     testBroker: (broker) => api.post(`/setup/test/broker/${broker}`),
     testAi: () => api.post('/setup/test/ai'),
@@ -360,6 +361,12 @@ export const systemApi = {
 // Autopilot: proposals, guardrails, paper account
 export const autopilotApi = {
     agents: () => api.get('/autopilot/agents', { timeout: 60000 }),
+    risk: () => api.get('/autopilot/risk', { timeout: 60000 }),
+    updateRisk: (patch) => api.post('/autopilot/risk', patch, { timeout: 60000 }),
+    resumeRisk: () => api.post('/autopilot/risk/resume', null, { timeout: 60000 }),
+    evaluation: () => api.get('/autopilot/evaluation'),
+    runEvaluation: () => api.post('/autopilot/evaluation/run', null, { timeout: 600000 }),
+    scheduler: () => api.get('/autopilot/scheduler'),
     updateAgent: (id, patch) => api.post(`/autopilot/agents/${id}`, patch),
     runAgent: (id) => api.post(`/autopilot/agents/${id}/run`, null, { timeout: 180000 }),
     longterm: (refresh = false) => api.get('/autopilot/longterm', { params: { refresh }, timeout: 300000 }),

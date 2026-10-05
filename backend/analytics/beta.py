@@ -31,10 +31,10 @@ TTL_BETA = 86400  # a day — beta moves slowly
 @cached(ttl=TTL_BETA, prefix="nifty_returns", persist=True, skip_if=lambda r: r is None or r.empty)
 def _nifty_returns(period: str = "1y") -> pd.Series:
     """Daily Nifty 50 returns, indexed by date."""
-    import yfinance as yf
+    from market import data
 
     try:
-        history = yf.Ticker(NIFTY).history(period=period)
+        history = data.history(NIFTY, period=period)
         if history.empty:
             return pd.Series(dtype=float)
         closes = history["Close"]

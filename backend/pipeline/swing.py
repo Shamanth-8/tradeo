@@ -9,17 +9,15 @@ The rule (daily bars, the universe's equities):
   stop     2 x ATR(14) below entry; target 2:1; out after HOLD_DAYS calendar
            days (about 10 trading days), delivery charges
 
-Backtest 2020–26 (66 large caps): +0.19% per trade after costs vs −0.02% for
-random entries with the same exits, ~220 trades a year — but it beat random in
-only 3 of 7 years (the edge was 2020–21). Paper only until the live record
-says otherwise.
+Tested with pipeline/evaluate.py (portfolio, real costs): no better than
+random entries with the same exits, in-sample (2020–24) or held out (2025+);
+the market filter doesn't rescue it. Kept as a reference and for the live
+paper record.
 """
 
 from __future__ import annotations
 
 import logging
-import threading
-import time
 from typing import Any
 
 import pandas as pd
@@ -29,8 +27,6 @@ log = logging.getLogger("tradeo.swing")
 SOURCE = "swing"
 RUN_AT = (9, 25)
 HOLD_DAYS = 14
-BACKTEST = ("2020–26: +0.19% avg per trade after costs vs −0.02% random, 45.7% wins, "
-            "~220 trades/yr — but better than random in only 3 of 7 years.")
 
 
 def scan() -> list[dict[str, Any]]:
@@ -62,7 +58,7 @@ def scan() -> list[dict[str, Any]]:
 
 
 def run_once() -> dict[str, Any]:
-    from autopilot import agents, store, triggers
+    from autopilot import agents, triggers
     from brokers.quotes import broker_ltp
     from market import hours
     from pipeline import pretrade
@@ -79,7 +75,6 @@ def run_once() -> dict[str, Any]:
 
     setups = scan()
     held = set(triggers.open_symbols())
-    equity = float(store.paper_account()["equity"])
     opened, skipped = [], []
     for s in setups:
         if len(opened) >= room:
@@ -97,7 +92,7 @@ def run_once() -> dict[str, Any]:
             continue
         result = triggers.arm(
             symbol=s["symbol"], entry_price=price, stop_loss=stop, target=price + 2 * (price - stop),
-            quantity=int(equity * float(rules["position_pct"]) / 100 // price) or None, conviction=60,
+            max_position_pct=float(rules["position_pct"]), conviction=60,
             source=SOURCE, horizon_days=HOLD_DAYS,
             reason=(f"swing breakout {s['date']}: closed {s['breakout_pct']}% above its 20-day high "
                     f"on {s['volume_x']}x volume, above the 50-day average | news: {guard['why']}"))
@@ -114,8 +109,10 @@ def run_once() -> dict[str, Any]:
                 bot.send("📈 <b>Swing (paper)</b>\n" + "\n".join(
                     f"BUY {o['symbol']} {o['quantity']} @ ₹{o['entry_price']:,.2f} · stop ₹{o['stop_loss']:,.2f}"
                     f" · target ₹{o['target']:,.2f} · up to {HOLD_DAYS} days" for o in opened))
-        except Exception as exc:
-            log.warning("swing announce failed: %s", exc)
+        except Exception as exc:  # alerts are best effort; the trade is already booked
+            from core import failures
+
+            failures.record("telegram.swing", exc, log)
     return {"ok": bool(opened), "setups": len(setups), "opened": opened, "skipped": skipped,
             "symbol": ", ".join(o["symbol"] for o in opened)}
 
@@ -123,21 +120,14 @@ def run_once() -> dict[str, Any]:
 _attempted: set = set()
 
 
-def start() -> None:
+def tick() -> None:
+    """Called every minute by autopilot/scheduler.py: runs once a day at RUN_AT, while switched on."""
     from autopilot import agents
     from market import hours
 
-    def loop() -> None:
-        while True:
-            try:
-                now = hours.now_ist()
-                if (agents.swing_settings()["enabled"] and hours.is_open()
-                        and (now.hour, now.minute) >= RUN_AT and now.date() not in _attempted):
-                    _attempted.add(now.date())
-                    outcome = run_once()
-                    log.info("swing: %s", outcome.get("symbol") or outcome.get("error") or "no setups")
-            except Exception as exc:
-                log.warning("swing run failed: %s", exc)
-            time.sleep(60)
-
-    threading.Thread(target=loop, name="swing", daemon=True).start()
+    now = hours.now_ist()
+    if (agents.swing_settings()["enabled"] and hours.is_open()
+            and (now.hour, now.minute) >= RUN_AT and now.date() not in _attempted):
+        _attempted.add(now.date())
+        outcome = run_once()
+        log.info("swing: %s", outcome.get("symbol") or outcome.get("error") or "no setups")

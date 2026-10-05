@@ -170,37 +170,81 @@ All on the **Autopilot** page, all **OFF by default**, all **paper only**:
 | Switch | What it does | When | Defaults (adjustable) |
 |---|---|---|---|
 | **Watchtower** | Scans the market, backtests promising stocks, has the local AI review them. Never trades itself — it feeds the fly brain, Live signals and Telegram. Covers *all* background scanning. | every 30 min in market hours | — |
-| **Intraday** | Nifty 50 opening-range breakouts above VWAP on a volume surge; closed the same day. | every 5 min, 09:20–14:45; out by 15:15 | 3 open, 10 trades/day, 2.5% each |
-| **Swing** | Volume breakouts (above the 20-day high on 2× volume, above the 50-day average). | 09:25 daily; holds ≤ 14 days | 5 open, 2.5% each |
-| **Daily pick** | The top bullish stock(s) by Tradeo's scorer. | your chosen time | min score 60, 1 pick/day, 2.5% |
-| **Fly brain** | Ranks Watchtower's openings with the fly connectome; buys the top half; learns from every close. | after each Watchtower scan | 5 open, 2.5% each |
+| **Monthly momentum** | Holds the top stocks by 3-month return (latest month skipped) that are above their 200-day average; equal weight; cash while the Nifty is in a downtrend. | first session of each month, 09:30 | 10 holdings, 50% of the account |
+| **Intraday** | Nifty 50 opening-range breakouts above VWAP on a volume surge; closed the same day. | every 5 min, 09:20–14:45; out by 15:15 | 3 open, 10 trades/day |
+| **Swing** | Volume breakouts (above the 20-day high on 2× volume, above the 50-day average). | 09:25 daily; holds ≤ 14 days | 5 open |
+| **Daily pick** | The top bullish stock(s) by Tradeo's scorer. | your chosen time | min score 60, 1 pick/day |
+| **Fly brain** | Ranks Watchtower's openings with the fly connectome; buys the top half; learns from every close. | after each Watchtower scan | 5 open |
 
 Every buy is a **bracket**: entry, a stop (ATR-based) and a target (2:1), closed
 automatically. Each agent's card has **Run now**, its record (trades, wins,
-losses, P&L) and its backtest text.
+losses, P&L) and how it tested. All agents run on one scheduler
+(`autopilot/scheduler.py`); `GET /api/autopilot/scheduler` shows each job's
+next run and errors.
+
+### Account risk limits
+
+Every agent's buy also passes account-level checks (`autopilot/risk.py`),
+adjustable on the Autopilot page:
+
+| Rule | Default | What happens |
+|---|---|---|
+| **Risk per trade** | 0.25% of the account | Position sized so hitting the stop loses this much; each agent's "max size" caps it. A volatile stock (wide stop) gets fewer shares. |
+| **Daily loss limit** | −2% today | No new buys for the rest of the day. |
+| **Drawdown switch** | −10% from the peak | No new buys until you press **Resume**. |
+| **Sector cap** | 25% of the account | A buy that would exceed it is skipped. |
+| **Market filter** | on | No buys while the Nifty 50 is below its 200-day average. If the index can't be fetched, no buys either. |
 
 ---
 
 ## Strategies, and how they tested
 
-After Indian charges and slippage. "Random" = random stocks with the same exits.
+`python -m pipeline.evaluate` (or **Re-run** on the Autopilot page) simulates
+each strategy as a portfolio: positions sized and capped like the live agents,
+marked to market daily, with Indian charges on both legs and slippage that
+grows with order size against the stock's daily trading. Rules were chosen on
+**2020–2024 only**; **2025 onward is held out** and was looked at once, after
+the rules were fixed.
 
-| Strategy | Holds | Backtest | Verdict |
-|---|---|---|---|
-| **Intraday** | same day | last 60 days of 5-min bars: −0.25%/trade, 29% wins, ~21 trades/day; random ≈ −0.23% | loses — costs (~0.2%/trade) eat the gross edge |
-| **Swing** | ≤ 2 weeks | 2020–26: +0.19%/trade vs −0.02% random, ~220/yr | mixed — better than random in only 3 of 7 years |
-| **Daily pick** | until stop/target | 2020–26: +0.54%/trade vs +0.58% random | ≈ random |
-| **Fly brain** | ~1 week | 2020–26 walk-forward: about −5%/yr | no edge yet |
-| **Momentum lists** | 1 m / 6 m / 1 y | top 10 vs buying all 66: 20.0 vs 17.1%/yr · 41.7 vs 30.2% · 43.2 vs 32.5% | beat "buy everything" at each horizon — few periods, survivorship-inflated |
+| Strategy | 2020–24 CAGR · Sharpe · worst drop | Held out 2025+ CAGR · Sharpe · worst drop |
+|---|---|---|
+| Nifty 50 (buy and hold) | 14.2% · 0.46 · −38% | −2.9%/yr |
+| Buy all 66 (control) | 32.6% · 1.19 · −37% | **+3.8%** · −0.06 · −16% |
+| **Momentum top 10 + market filter** | **42.5% · 1.54 · −16%** | −2.5% · −0.81 · −12% |
+| Momentum top 10, no filter | 43.4% · 1.36 · −40% | −20.4% · −1.40 · −35% |
+| Swing breakout + market filter | 2.2% · −0.97 · −7% | −1.6% · −2.90 · −4% |
+| Swing breakout, no filter | 2.3% · −0.93 · −7% | −2.8% · −2.62 · −5% |
+| Random entries, swing exits (control) | 2.9% · −0.92 · −6% | −0.1% · −1.82 · −4% |
 
-Backtests use today's large caps (survivorship bias), so absolute returns are
-flattering; compare against the random or buy-everything column. The live paper
-record is the real test.
+Sharpe uses a 6.5% risk-free rate, so anything earning less than cash has a
+negative Sharpe. Swing's low returns are partly its small positions (0.25%
+risk per trade).
+
+**What this says, plainly:**
+
+- **No strategy has a proven edge.** Momentum beat buying everything by about
+  10%/yr in 2020–24, but **lost to it in the held-out period** (−2.5% vs +3.8%).
+  The 2020–24 result is real but may not persist — momentum has long runs
+  where it underperforms.
+- **The market filter is the one rule that clearly helped**: it cut
+  momentum's worst drop from −40% to −16% in-sample and from −35% to −12%
+  held out, by holding cash in downtrends.
+- **Swing is no better than random entries** with the same exits.
+- Intraday (60 days of 5-min bars: −0.25%/trade, ≈ random), daily pick
+  (≈ random) and the fly brain (about −5%/yr) were tested earlier with their
+  own harnesses; Yahoo's 60-day limit on 5-minute bars means intraday can't be
+  tested properly for free.
+
+**Survivorship bias:** the universe is today's large caps, so stocks that fell
+out of the indices are missing and absolute returns are flattered. The
+buy-all and random controls share that bias, which is why they're there.
 
 **Pre-trade check.** Before any agent buys, Tradeo reads that stock's own
-headlines. No news → the rule decides. Clearly bad news → skip, with the
-headline recorded. With `VERIFY_WITH_CLOUD=true` a cloud model also reviews the
-trade and can veto it, with its reasons recorded.
+headlines. It's deliberately a minor filter: coverage is thin and word-scoring
+misreads headlines, so it blocks only on red-flag events (fraud, a SEBI order,
+a raid, a default…) or several strongly negative headlines. With
+`VERIFY_WITH_CLOUD=true` a cloud model also reviews the trade and can veto it,
+with its reasons recorded.
 
 ---
 
@@ -492,16 +536,20 @@ backend/
 ├── ai/              brain (local/cloud routing), sentiment, conversation, verifier;
 │                    providers/plugins/ for your own LLM
 ├── api/routes/      REST API (docs at http://localhost:8000/docs)
-├── autopilot/       agent switches (agents.py), paper ledger, brackets, costs
+├── autopilot/       agent switches (agents.py), scheduler, account risk (risk.py),
+│                    paper ledger, brackets (triggers.py, monitor.py), costs
 ├── brokers/         zerodha · dhan · angelone · kotakneo · depository · manual;
 │                    plugins/ for your own broker
 │   └── plugins/     add your own broker here (see README there)
 ├── ml/flybrain/     connectome, reservoir, RL agent, history and test labs
-├── pipeline/        watchtower, intraday, swing, longterm, daily pick, fly trader, pre-trade check
+├── core/            config, credentials, failure counter (failures.py)
+├── market/          data.py — the one door to market data (cache, retry, failure counts)
+├── pipeline/        watchtower, momentum, intraday, swing, longterm, daily pick, fly trader,
+│                    pre-trade check, evaluate.py (strategy evaluation)
 ├── realtime/        signal scoring and scanner
 ├── voice/           Whisper, Piper, command routing
 ├── research/        bundled research engine (Vibe-Trading, own venv)
-├── tests/           regression tests (pytest)
+├── tests/           regression and money-path tests (pytest)
 └── .env.example     every setting, documented
 frontend/src/        React app — pages/, components/, hooks/, services/api.js
 config/              universe.json (instruments), settings.json
@@ -537,7 +585,7 @@ All installed by `setup.sh`; nothing is vendored.
 
 ```bash
 cd backend && ./venv/bin/pip install -r requirements-dev.txt
-./venv/bin/python -m pytest -q          # regression tests
+./venv/bin/python -m pytest -q          # 55 tests: charges, sizing, fills, risk limits, agents, security
 cd ../frontend && npx vite build        # the UI must build
 ```
 
@@ -550,12 +598,14 @@ GitHub Actions runs both on every push and pull request
 
 | Area | Status |
 |---|---|
-| Paper trading, agents, switches, brackets, charges | working, covered by tests |
+| Paper trading, agents, switches, brackets, charges, risk limits | working, covered by tests |
+| Strategy evaluation (benchmarks, held-out period) | working (`python -m pipeline.evaluate`) |
+| "More tools" extras (Mood Ring, Regret Analyzer, Stock DNA…) | **experimental** — rough heuristics |
 | Local AI, voice, Telegram | working |
 | Watchtower, long-term lists, fly brain labs | working |
 | Angel One, Dhan connectors | built; need a real account to verify end to end |
 | Zerodha, Kotak Neo connectors | built from official docs/SDK; **untested with real accounts** |
-| A strategy with a proven edge | **not yet** — see the backtests |
+| A strategy with a proven edge | **not yet** — momentum did well 2020–24 but lost to buy-all in the 2025+ hold-out |
 
 ---
 
@@ -584,7 +634,8 @@ Please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 | "No reasoning engine online" | Start Ollama (`ollama serve`) and `ollama pull` the model in `OLLAMA_MODEL`. |
 | First answer is slow | The model loads on first use (a few seconds); later answers are faster. |
 | Mic says "no audio" | Allow microphone access in the browser; click the mic, speak, click again. |
-| Nothing is trading | Everything starts OFF — switch agents on in **Autopilot**, during market hours. |
+| Nothing is trading | Everything starts OFF — switch agents on in **Autopilot**, during market hours. Then check **Account risk** on the same page: the market filter pauses buys while the Nifty is below its 200-day average, and the daily-loss and drawdown limits can halt buys. |
+| Something seems silently broken | **Connections → Failures** lists every data source, agent run or alert that failed since the backend started. |
 | Watchtower finds 0 openings | Normal on a quiet day; it re-scans every 30 min. |
 | Fly brain says "not trained yet" | `./scripts/setup.sh --flybrain` |
 | Broker "connected": false | Re-check keys on Connections; Zerodha needs a daily login. |

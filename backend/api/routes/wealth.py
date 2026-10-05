@@ -177,8 +177,10 @@ async def order_preview(order: OrderPreview) -> dict[str, Any]:
     available = 0.0
     try:
         available = adapter.funds().available
-    except Exception:
-        pass
+    except Exception as exc:  # broker SDK errors vary; the preview shows ₹0 available
+        from core import failures
+
+        failures.record(f"broker.{adapter.name}.funds", exc)
 
     return {
         "symbol": order.symbol.upper(),
@@ -207,6 +209,7 @@ AGENTS = {
     "manual": ("You", "Placed by hand"),
     "intraday": ("Intraday agent", "Opening-range breakouts, closed the same day"),
     "swing": ("Swing agent", "Volume breakouts, held up to two weeks"),
+    "momentum": ("Monthly momentum", "Top stocks by 3-month momentum, rebalanced monthly"),
 }
 
 

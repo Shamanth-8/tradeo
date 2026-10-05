@@ -9,9 +9,18 @@ says something just went wrong.
 
   1. Stock-specific headlines (whole-word matches on symbol or company name in
      the news feeds). None → pass.
-  2. A clearly negative tone across them (VADER) → block, naming the headline.
-  3. If the cloud verifier is on (VERIFY_WITH_CLOUD with an OpenRouter key),
-     it reviews the trade with those headlines; "reject" → block.
+  2. A red-flag event in any headline (fraud, a SEBI order, a raid, a default…)
+     → block, naming the headline.
+  3. At least MIN_HEADLINES headlines with a strongly negative average tone
+     (VADER) → block.
+  4. If the cloud verifier is on (VERIFY_WITH_CLOUD with a cloud key), it
+     reviews the trade with those headlines; "reject" → block.
+
+This is deliberately a minor filter, not a signal. Coverage is thin — on a
+typical day only about a third of the universe has any headline of its own —
+and a word-scoring tool misreads plenty of headlines ("cuts losses" reads as
+negative). So one gloomy headline never blocks a trade by itself; only clear
+events or a run of strongly negative ones do.
 
 Fast by design: no local LLM call. The verifier is the only network call and
 runs only when there is news to weigh.
@@ -20,11 +29,21 @@ runs only when there is news to weigh.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
+
+from core import failures
 
 log = logging.getLogger("tradeo.pretrade")
 
-NEGATIVE_TONE = -0.35   # VADER compound average that counts as clearly bad news
+NEGATIVE_TONE = -0.5    # VADER compound average that counts as strongly negative
+MIN_HEADLINES = 2       # one headline alone is too noisy to act on
+RED_FLAGS = re.compile(
+    r"\b(fraud|scam|raid(?:s|ed)?|sebi (?:order|ban|bars|probe)|probe|default(?:s|ed)?|insolven\w*|"
+    r"bankrupt\w*|forensic audit|auditor resign\w*|ed (?:raid|searches)|income tax (?:raid|searches)|"
+    r"pledge invoked|downgrade[sd]? to junk|suspend(?:s|ed)? trading)\b",
+    re.IGNORECASE,
+)
 
 
 def check(symbol: str, score: float | None = None, plan: dict[str, Any] | None = None,
@@ -41,8 +60,9 @@ def check(symbol: str, score: float | None = None, plan: dict[str, Any] | None =
         keywords.append(short)
     try:
         items = news_fetcher.fetch_latest_news(keywords=keywords)
-    except Exception as exc:
-        log.info("news unavailable for %s: %s", symbol, exc)
+        failures.ok("news.pretrade")
+    except Exception as exc:  # RSS failures take many forms; the trade falls back to its rules
+        failures.record("news.pretrade", exc, log)
         items = []
 
     titles = [i.get("title", "") for i in items if i.get("title")][:8]
@@ -52,6 +72,10 @@ def check(symbol: str, score: float | None = None, plan: dict[str, Any] | None =
 
     tone = float(sentiment_analyzer.analyze_batch(titles).get("avg_sentiment", 0.0))
     result: dict[str, Any] = {"headlines": titles, "tone": round(tone, 3), "verifier": None}
+
+    flagged = next((t for t in titles if RED_FLAGS.search(t)), None)
+    if flagged:
+        return {**result, "ok": False, "why": f"red-flag news: {flagged[:160]}"}
 
     from ai.providers.verifier import verifier
 
@@ -68,12 +92,13 @@ def check(symbol: str, score: float | None = None, plan: dict[str, Any] | None =
             if view.get("decision") == "reject":
                 concern = "; ".join((view.get("concerns") or [])[:2]) or view.get("reasoning", "")
                 return {**result, "ok": False, "why": f"cloud verifier rejected: {concern}"[:300]}
-        except Exception as exc:
-            log.info("verifier unavailable for %s: %s", symbol, exc)
+        except Exception as exc:  # provider errors vary; a missing second opinion is not a veto
+            failures.record("verifier.pretrade", exc, log)
             result["verifier"] = {"error": str(exc)[:200]}
 
-    if tone <= NEGATIVE_TONE:
-        return {**result, "ok": False, "why": f"bad news ({tone:+.2f}): {titles[0][:140]}"}
+    if len(titles) >= MIN_HEADLINES and tone <= NEGATIVE_TONE:
+        return {**result, "ok": False,
+                "why": f"{len(titles)} strongly negative headlines ({tone:+.2f}): {titles[0][:140]}"}
     return {**result, "ok": True,
             "why": f"{len(titles)} headline(s), tone {tone:+.2f}"
                    + (f"; verifier {result['verifier'].get('decision')}" if result.get("verifier") and result["verifier"].get("decision") else "")}

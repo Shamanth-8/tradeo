@@ -131,21 +131,11 @@ async def lifespan(app: FastAPI):
     # The research engine (a second Python server, ~1 GB RAM) is not started
     # here: the Research page's Start button launches it when you need it.
 
-    # The pick of the day: by rule, paper only, once per trading day.
-    from pipeline import daily_pick
+    # Every trading agent (daily pick, swing, momentum, intraday, fly brain) on
+    # one scheduler. Each idles until switched on in Autopilot; all paper only.
+    from autopilot import scheduler as agent_scheduler
 
-    daily_pick.start()
-
-    # Intraday (every 5 min) and swing (09:25) agents: idle until switched on.
-    from pipeline import intraday, swing
-
-    intraday.start()
-    swing.start()
-
-    # The fly brain: learns from its closed paper trades, then trades on paper.
-    from pipeline import fly_rl_trader
-
-    fly_rl_trader.start()
+    agent_scheduler.start()
 
     if settings.autopilot_mode == "live" or settings.live_broker:
         # Tradeo is a paper-trading lab; the order path is unsupported.
@@ -178,9 +168,10 @@ async def lifespan(app: FastAPI):
         from pipeline.watchtower import watchtower as pipeline_watchtower
 
         pipeline_watchtower.stop()
-    except Exception:
-        pass
+    except Exception as exc:  # shutting down anyway; just say what didn't stop cleanly
+        log.warning("watchtower did not stop cleanly: %s", exc)
     log.info("%s shutting down", settings.assistant_name)
+    agent_scheduler.stop()
 
 
 app = FastAPI(
@@ -193,10 +184,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS for Electron frontend
+# CORS: only the app's own pages may call the API. "*" would let any website
+# open in your browser read your holdings, change saved keys or switch agents
+# through localhost. The web UI runs on localhost:5173; the packaged desktop
+# app loads from file:// and sends its requests as http://localhost (electron.js).
+LOCAL_ORIGINS = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$"
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=LOCAL_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

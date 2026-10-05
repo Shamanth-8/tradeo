@@ -19,8 +19,14 @@ Within that scope the enforcement is real, and it happens in three layers:
   2. **A stripped namespace.** No `__builtins__` beyond an explicit allowlist,
      and no module objects at all — `math` and friends are injected as
      already-bound functions.
-  3. **A step budget.** The engine ticks a counter each bar; a strategy that
-     will not terminate is stopped with a clear error rather than hanging.
+  3. **A time budget.** The engine checks the clock between bars, and
+     `time_limit()` also stops a loop that runs too long *inside* one bar: it
+     traces only the strategy's own lines (code compiled as "<strategy>"), so
+     the engine itself runs at full speed.
+
+Not covered: one huge built-in call (`sum(range(10**12))`, a giant list) runs
+in C where no Python check can interrupt it. That costs time or memory on your
+own machine, not your data — read strategies you didn't write.
 """
 
 from __future__ import annotations
@@ -29,6 +35,9 @@ import ast
 import builtins
 import logging
 import math
+import sys
+import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -38,6 +47,38 @@ log = logging.getLogger("tradeo.strategies.sandbox")
 
 MAX_SOURCE_BYTES = 64_000
 MAX_AST_NODES = 8_000
+
+
+class TimeBudgetExceeded(Exception):
+    """Strategy code ran past its time budget."""
+
+
+@contextmanager
+def time_limit(deadline: float, check_every: int = 1000):
+    """
+    Stop strategy code that is still running at `deadline` (time.perf_counter()),
+    even in the middle of one bar's on_bar call.
+    """
+    previous = sys.gettrace()
+    lines = 0
+
+    def on_line(frame, event, arg):
+        nonlocal lines
+        lines += 1
+        if lines % check_every == 0 and time.perf_counter() > deadline:
+            raise TimeBudgetExceeded("strategy ran past its time budget inside one bar — "
+                                     "check for a loop that runs far too long")
+        return on_line
+
+    def on_call(frame, event, arg):
+        # Only the user's code is traced; everything else returns None (no line events).
+        return on_line if frame.f_code.co_filename == "<strategy>" else None
+
+    sys.settrace(on_call)
+    try:
+        yield
+    finally:
+        sys.settrace(previous)
 
 
 class SandboxError(Exception):

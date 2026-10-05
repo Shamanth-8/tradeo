@@ -34,15 +34,14 @@ def universe_equities() -> list[str]:
 
 
 def download(symbols: list[str], period: str = PERIOD) -> pd.DataFrame:
-    import yfinance as yf
+    from market import data
 
-    raw = yf.download([s + ".NS" for s in symbols], period=period, interval="1d",
-                      auto_adjust=True, group_by="ticker", threads=True, progress=False)
+    raw = data.download([s + ".NS" for s in symbols], period=period, interval="1d")
+    by_ticker = data.split(raw, [s + ".NS" for s in symbols])
     frames = []
     for s in symbols:
-        try:
-            d = raw[s + ".NS"].dropna(how="all")
-        except KeyError:
+        d = by_ticker.get(s + ".NS")
+        if d is None:
             log.warning("no data for %s", s)
             continue
         if len(d) < MIN_ROWS:

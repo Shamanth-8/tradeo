@@ -4,6 +4,8 @@ import {
 } from 'lucide-react'
 import { HudPanel, Stat, Meter, Delta, Empty, Loading, ErrorNote } from '../components/hud/HudPanel'
 import TradingAgents from '../components/TradingAgents'
+import RiskPanel from '../components/RiskPanel'
+import EvaluationPanel from '../components/EvaluationPanel'
 import TriggerPanel from '../components/TriggerPanel'
 import { autopilotApi } from '../services/api'
 
@@ -119,7 +121,11 @@ export default function Autopilot() {
                 </div>
             </header>
 
+            <RiskPanel />
+
             <TradingAgents />
+
+            <EvaluationPanel />
 
             {/* The agents' open brackets, live. */}
             <TriggerPanel />

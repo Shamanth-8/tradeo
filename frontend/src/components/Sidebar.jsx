@@ -42,7 +42,7 @@ const SECTIONS = [
         label: 'More',
         items: [
             // Experimental tools and manual holdings, on one page.
-            { path: '/labs', icon: Sparkles, label: 'More tools' },
+            { path: '/labs', icon: Sparkles, label: 'More tools (experimental)' },
         ],
     },
 ]
