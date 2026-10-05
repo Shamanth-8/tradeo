@@ -147,6 +147,15 @@ async def lifespan(app: FastAPI):
 
     fly_rl_trader.start()
 
+    if settings.autopilot_mode == "live" or settings.live_broker:
+        # Tradeo is a paper-trading lab; the order path is unsupported.
+        log.warning(
+            "UNSUPPORTED: real-money settings detected (AUTOPILOT_MODE=%s, LIVE_BROKER=%s). "
+            "Tradeo is for paper trading only — see DISCLAIMER.md. You are responsible "
+            "for any real order sent.",
+            settings.autopilot_mode, settings.live_broker or "-",
+        )
+
     log.info(
         "%s online — local=%s cloud=%s mode=%s telegram=%s",
         settings.assistant_name,

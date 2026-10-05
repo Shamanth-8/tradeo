@@ -79,6 +79,14 @@ export default function Layout() {
             />
 
             <main className="relative z-20 flex-1 overflow-y-auto">
+                {/* On every screen: Tradeo is a strategy-testing lab, not a way to trade real money. */}
+                <div
+                    role="note"
+                    className="sticky top-0 z-30 border-b border-alert-500/30 bg-dark-950/90 px-6 py-1.5 text-center text-[11px] text-alert-300 backdrop-blur"
+                >
+                    Paper trading only — virtual money for testing strategies, not for real-market trading.
+                    Not investment advice.
+                </div>
                 {/* Keyed by path: every screen gets its entrance animation. */}
                 <div key={location.pathname} className="page-enter mx-auto h-full max-w-[1600px] p-6">
                     <Outlet />

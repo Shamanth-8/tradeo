@@ -158,6 +158,37 @@ def test_plugin_broker_loads_and_guards_orders(tmp_path, monkeypatch):
         registry.reload()
 
 
+# ---- LLM plugins ------------------------------------------------------------------------
+
+def test_llm_plugin_is_picked_by_name(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from ai.providers import registry
+    from ai.providers.openai_compat import build_cloud_provider
+
+    (tmp_path / "echo.py").write_text(
+        "from ai.providers.base import LLMProvider\n"
+        "class Echo(LLMProvider):\n"
+        "    name = 'echo'\n"
+        "    def __init__(self, settings): self._model = settings.cloud_model\n"
+        "    model = property(lambda self: self._model)\n"
+        "    def is_available(self): return True\n"
+        "    def complete(self, prompt, system=None, temperature=0.3, max_tokens=1200, json_mode=False):\n"
+        "        return prompt\n"
+    )
+    (tmp_path / "broken.py").write_text("raise ImportError('nope')\n")   # must not sink the rest
+    monkeypatch.setattr(registry, "PLUGIN_DIR", tmp_path)
+
+    provider = build_cloud_provider(SimpleNamespace(cloud_provider="echo", cloud_model="m1"))
+    assert provider.name == "echo" and provider.model == "m1" and provider.complete("hi") == "hi"
+
+
+def test_shipped_llm_template_is_not_loaded():
+    from ai.providers import registry
+
+    assert "example" not in registry.plugin_providers()
+
+
 # ---- fly brain and test lab -------------------------------------------------------------
 
 def test_dopamine_learns_in_the_right_direction():

@@ -7,16 +7,20 @@ opt-in: set CLOUD_LLM_PROVIDER plus that provider's key.
   openrouter  OpenRouter (many models behind one key, including free ones)
   openai      OpenAI
   custom      any other OpenAI-compatible endpoint (CLOUD_BASE_URL + CLOUD_API_KEY)
+  <plugin>    any LLMProvider in ai/providers/plugins/ (see its README)
 """
 
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Iterator
 
 import requests
 
 from .base import LLMProvider, ProviderError
+
+log = logging.getLogger("tradeo.ai")
 
 
 class OpenAICompatProvider(LLMProvider):
@@ -162,9 +166,17 @@ class OpenAICompatProvider(LLMProvider):
             raise ProviderError(f"{self.name} stream failed: {exc}") from exc
 
 
-def build_cloud_provider(settings) -> OpenAICompatProvider:
+def build_cloud_provider(settings) -> LLMProvider:
     """Construct the configured cloud provider. Without a key it is simply unavailable."""
     provider = (settings.cloud_provider or "openrouter").lower()
+
+    if provider not in ("openai", "custom", "openrouter"):
+        from .registry import build_plugin_provider
+
+        plugin = build_plugin_provider(provider, settings)
+        if plugin is not None:
+            return plugin
+        log.warning("unknown CLOUD_LLM_PROVIDER %r — falling back to openrouter", provider)
 
     if provider == "openai":
         return OpenAICompatProvider(

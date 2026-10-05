@@ -1,17 +1,21 @@
 # Contributing to Tradeo
 
-Thanks for helping. Tradeo is a local-first, paper-trading-first market
-assistant for Indian investors, and the most valuable contributions are the
-ones that make it more **honest** and more **useful**: strategies that survive
-a fair backtest, data sources, broker plugins, and fixes.
+Thanks for helping. Tradeo is a local-first **paper-trading lab** for Indian
+investors: a place to test trading strategies with virtual money, not to trade
+real money (see [DISCLAIMER.md](DISCLAIMER.md)). The most valuable
+contributions are the ones that make it more **honest** and more **useful**:
+strategies that survive a fair backtest, data sources, LLM and broker plugins,
+and fixes.
 
 ## Ground rules
 
 1. **Never commit secrets.** `backend/.env` and `config/credentials.json` are
    git-ignored; keep it that way. Run `git status` before every commit.
-2. **Paper first.** Nothing may place a real order without the three explicit
-   switches described in the README (`LIVE_BROKER`, `<BROKER>_ALLOW_TRADING`,
-   `AUTOPILOT_MODE=live`). New agents start **OFF**.
+2. **Paper trading only.** Agents trade the paper account. PRs that make
+   real-money trading easier, on by default, or part of a strategy's normal
+   flow won't be merged. The existing unsupported order path must stay behind
+   its three switches (`LIVE_BROKER`, `<BROKER>_ALLOW_TRADING`,
+   `AUTOPILOT_MODE=live`), all off by default. New agents start **OFF**.
 3. **Local first.** Features must work without a cloud key. A cloud model may
    only be optional (see `VERIFY_WITH_CLOUD`).
 4. **Report results honestly.** A strategy PR includes its backtest after
@@ -37,10 +41,14 @@ at http://localhost:8000/docs).
 
 - **A broker plugin** — copy `backend/brokers/plugins/_example_broker.py`
   (guide: `backend/brokers/plugins/README.md`). Upstox, Groww, Fyers, ICICI
-  Direct and 5paisa are all missing.
+  Direct and 5paisa are all missing. Read-only (holdings, prices) is enough.
+- **An LLM plugin** — for an API that isn't OpenAI-compatible, copy
+  `backend/ai/providers/plugins/_example_provider.py`
+  (guide: `backend/ai/providers/plugins/README.md`). OpenAI-compatible APIs
+  need no code — a docs PR adding a tested `CLOUD_BASE_URL` is welcome too.
 - **A strategy** — see below.
 - **A data source** — e.g. per-stock Google News for sentiment, NSE bulk/block
-  deals, delivery %, FII/DII flows.
+  deals, delivery %, FII/DII flows (guide: [`docs/ADD_AN_API.md`](docs/ADD_AN_API.md)).
 - **Tests** for any bug you fix (`backend/tests/test_regressions.py`).
 - **UI polish** — keep `prefers-reduced-motion` working.
 

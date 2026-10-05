@@ -86,7 +86,9 @@ def llm_env() -> dict[str, str]:
     provider = settings.cloud_provider
     env: dict[str, str] = {"LANGCHAIN_TEMPERATURE": "0.0"}
 
-    if settings.cloud_enabled:
+    # An LLM plugin may not speak the OpenAI dialect the engine needs, so
+    # plugins leave the research agent on local Ollama.
+    if settings.cloud_enabled and provider in ("openai", "custom", "openrouter"):
         if provider == "openai":
             env |= {
                 "LANGCHAIN_PROVIDER": "openai",

@@ -43,7 +43,7 @@ FIELDS: dict[str, dict[str, Any]] = {
     # Which cloud key is used when AI_MODE allows the cloud. The research
     # engine follows it too.
     "CLOUD_LLM_PROVIDER": {"attr": "cloud_provider", "group": "ai", "secret": False,
-                           "label": "Cloud provider (openrouter, openai, custom)"},
+                           "label": "Cloud provider (openrouter, openai, custom, or a plugin name)"},
     "OLLAMA_MODEL": {"attr": "ollama_model", "group": "ai", "secret": False,
                      "label": "Local Ollama model"},
     "VERIFY_WITH_CLOUD": {"attr": "verify_with_cloud", "group": "ai", "secret": False, "type": "bool",

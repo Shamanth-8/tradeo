@@ -1,9 +1,15 @@
 # Tradeo
 
-![License: MIT](https://img.shields.io/badge/license-MIT-blue) ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue) ![Node 18+](https://img.shields.io/badge/node-18%2B-blue) ![Local-first AI](https://img.shields.io/badge/AI-local%20(Ollama)-green) ![Paper trading](https://img.shields.io/badge/trading-paper%20by%20default-orange) ![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen)
+![License: MIT](https://img.shields.io/badge/license-MIT-blue) ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue) ![Node 18+](https://img.shields.io/badge/node-18%2B-blue) ![Local-first AI](https://img.shields.io/badge/AI-local%20(Ollama)-green) ![Paper trading only](https://img.shields.io/badge/trading-paper%20only-orange) ![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen)
 
 **An open-source, local-first market assistant and paper-trading lab for Indian
 investors** — NSE/BSE equities, ETFs, REITs, InvITs, bonds and gold.
+
+> [!WARNING]
+> **Paper trading only.** Tradeo is for testing trading strategies with
+> virtual money. It is **not** for trading real money in real markets, and
+> nothing in it is investment advice. None of its strategies has a proven edge.
+> Read the [disclaimer](DISCLAIMER.md) before using it.
 
 Talk to it or type to it, let it scan the market, switch on trading agents
 (intraday, swing, a daily pick, and an experimental reinforcement-learning
@@ -12,18 +18,17 @@ a paper account — with each strategy's honest backtest shown next to its switc
 
 - **Runs on your laptop.** The AI is a local model through [Ollama](https://ollama.com);
   market data comes from free public sources. No account, key or broker needed.
-- **Paper first.** Nothing touches real money unless you connect a broker *and*
-  turn on three separate switches.
+- **Paper trading only.** Every agent trades a virtual ₹10 lakh account with
+  realistic Indian charges. It's a lab for testing strategies, not a way to
+  trade real money.
 - **Everything starts OFF.** No background scanning or trading until you switch it
   on; heavy parts (AI model, voice) load only when used.
 - **Honest numbers.** Every strategy shows its backtest after Indian charges,
   compared against random picks. Most have no proven edge yet — that's the point
   of testing on paper, and the invitation to contributors.
-- **Open and pluggable.** Zerodha, Dhan, Angel One and Kotak Neo are built in;
-  any other broker or strategy is one Python file.
-
-> **Not financial advice.** Tradeo is a research and learning tool. Trade real
-> money at your own risk.
+- **Open and pluggable.** Bring your own LLM (any Ollama model, any
+  OpenAI-compatible API, or a one-file plugin), data API, broker (to read your
+  holdings) or strategy. See [Extending Tradeo](#extending-tradeo-your-own-llm-api-broker-or-strategy).
 
 ---
 
@@ -40,20 +45,21 @@ a paper account — with each strategy's honest backtest shown next to its switc
 9. [The fly brain](#the-fly-brain)
 10. [Voice](#voice)
 11. [AI: local models and the optional cloud checker](#ai-local-models-and-the-optional-cloud-checker)
-12. [Brokers](#brokers)
-13. [Data sources and sentiment](#data-sources-and-sentiment)
-14. [Telegram alerts](#telegram-alerts)
-15. [Configuration](#configuration)
-16. [Install in detail](#install-in-detail)
-17. [Performance on small laptops](#performance-on-small-laptops)
-18. [Project layout](#project-layout)
-19. [Libraries used](#libraries-used)
-20. [Testing and CI](#testing-and-ci)
-21. [Project status](#project-status)
-22. [Contributing and ideas](#contributing-and-ideas)
-23. [Troubleshooting](#troubleshooting)
-24. [Security](#security)
-25. [License and credits](#license-and-credits)
+12. [Extending Tradeo: your own LLM, API, broker or strategy](#extending-tradeo-your-own-llm-api-broker-or-strategy)
+13. [Brokers](#brokers)
+14. [Data sources and sentiment](#data-sources-and-sentiment)
+15. [Telegram alerts](#telegram-alerts)
+16. [Configuration](#configuration)
+17. [Install in detail](#install-in-detail)
+18. [Performance on small laptops](#performance-on-small-laptops)
+19. [Project layout](#project-layout)
+20. [Libraries used](#libraries-used)
+21. [Testing and CI](#testing-and-ci)
+22. [Project status](#project-status)
+23. [Contributing and ideas](#contributing-and-ideas)
+24. [Troubleshooting](#troubleshooting)
+25. [Security](#security)
+26. [License and credits](#license-and-credits)
 
 ---
 
@@ -68,6 +74,7 @@ cd tradeo
 
 Open **http://localhost:5173**. Make sure [Ollama](https://ollama.com/download)
 is installed and running. That's all — no keys, accounts or broker needed.
+Everything you do in Tradeo happens on a paper (virtual) account.
 
 Requirements: Linux or macOS (Windows via WSL2), Python 3.11+, Node.js 18+,
 Ollama, 8 GB RAM. No GPU needed.
@@ -303,15 +310,36 @@ models cost nothing) adds:
 
 OpenAI (`CLOUD_LLM_PROVIDER=openai`) or any OpenAI-compatible endpoint
 (`CLOUD_LLM_PROVIDER=custom` + `CLOUD_BASE_URL`, `CLOUD_API_KEY`, `CLOUD_MODEL`)
-work the same way.
+work the same way — Gemini, Groq, Mistral, DeepSeek, LM Studio, llama.cpp,
+vLLM and more. For any other API, write a one-file plugin. Full guide:
+[**Adding your own LLM**](backend/ai/providers/plugins/README.md).
+
+---
+
+## Extending Tradeo: your own LLM, API, broker or strategy
+
+Everything below is a small, self-contained change. Pick a guide:
+
+| I want to add… | How | Guide |
+|---|---|---|
+| **A different local model** | `ollama pull <model>`, set `OLLAMA_MODEL` | [LLM guide §1](backend/ai/providers/plugins/README.md#1-any-ollama-model--change-one-line) |
+| **A hosted or local LLM API** (Gemini, Groq, LM Studio, vLLM…) | three keys, no code | [LLM guide §2](backend/ai/providers/plugins/README.md#2-any-openai-compatible-api--no-code) |
+| **Any other LLM** | one file in `backend/ai/providers/plugins/` | [LLM guide §3](backend/ai/providers/plugins/README.md#3-anything-else--a-plugin-one-python-file) |
+| **My API keys** (OpenRouter, Finnhub, Telegram…) | Connections screen or `backend/.env` | [API guide §1](docs/ADD_AN_API.md#1-adding-your-api-keys) |
+| **A new data API** (news, prices, flows…) | a fetcher in `backend/data/fetchers/` | [API guide §2](docs/ADD_AN_API.md#2-adding-a-new-data-api) |
+| **A broker** (to read holdings) | one file in `backend/brokers/plugins/` | [Broker guide](backend/brokers/plugins/README.md) |
+| **A strategy (trading agent)** | a module in `backend/pipeline/` + a switch | [CONTRIBUTING.md](CONTRIBUTING.md#adding-a-strategy-agent) |
+| **Tradeo in my own scripts or AI agent** | REST API (`/docs`) or the MCP server | [API guide §5–6](docs/ADD_AN_API.md#5-using-tradeos-rest-api) |
+
+Whatever you add, strategies run on the paper account only.
 
 ---
 
 ## Brokers
 
-**Paper trading needs no broker.** Connecting one shows your real holdings,
-gives the broker's own live prices, and — only if you enable it — lets agents
-place real orders.
+**Paper trading needs no broker.** Connecting one is optional and only
+**reads**: your real holdings on the Wealth screen, and the broker's own live
+prices for the paper account.
 
 | Broker | API | You need | Login |
 |---|---|---|---|
@@ -324,9 +352,12 @@ Enter them on **Connections → Brokers** (one card per broker, with a Test butt
 or in `backend/.env`. **TOTP secret** = the text code shown when you enable
 authenticator 2FA; Tradeo generates the 6-digit codes itself.
 
-**Live orders** need all three: `LIVE_BROKER=<broker>`,
-`<BROKER>_ALLOW_TRADING=true`, and `AUTOPILOT_MODE=live`.
-`GET /api/autopilot/safety` shows whether real money is reachable, and why not.
+**Real-money orders are not supported.** Tradeo is a paper-trading lab.
+The connectors contain an unverified order path behind three switches, all
+off by default (`LIVE_BROKER`, `<BROKER>_ALLOW_TRADING`, `AUTOPILOT_MODE=live`);
+leave them off. If you turn them on anyway, you alone are responsible for
+every order — see the [disclaimer](DISCLAIMER.md).
+`GET /api/autopilot/safety` confirms orders are staying on paper.
 
 **Any other broker:** copy `backend/brokers/plugins/_example_broker.py`, fill in
 the class, restart — its fields appear on Connections automatically. Guide:
@@ -458,10 +489,12 @@ Built for CPU-only laptops with 8 GB RAM:
 
 ```
 backend/
-├── ai/              brain (local/cloud routing), sentiment, conversation, verifier
+├── ai/              brain (local/cloud routing), sentiment, conversation, verifier;
+│                    providers/plugins/ for your own LLM
 ├── api/routes/      REST API (docs at http://localhost:8000/docs)
 ├── autopilot/       agent switches (agents.py), paper ledger, brackets, costs
-├── brokers/         zerodha · dhan · angelone · kotakneo · depository · manual
+├── brokers/         zerodha · dhan · angelone · kotakneo · depository · manual;
+│                    plugins/ for your own broker
 │   └── plugins/     add your own broker here (see README there)
 ├── ml/flybrain/     connectome, reservoir, RL agent, history and test labs
 ├── pipeline/        watchtower, intraday, swing, longterm, daily pick, fly trader, pre-trade check
@@ -473,6 +506,7 @@ backend/
 frontend/src/        React app — pages/, components/, hooks/, services/api.js
 config/              universe.json (instruments), settings.json
 scripts/             setup, start, backend control, connectome fetch
+docs/                guides: adding APIs, using Tradeo's REST API and MCP server
 .github/             CI workflow, issue and PR templates
 ```
 
@@ -528,12 +562,14 @@ GitHub Actions runs both on every push and pull request
 ## Contributing and ideas
 
 Contributions are very welcome — read [CONTRIBUTING.md](CONTRIBUTING.md) (setup,
-rules, and how to add a strategy or a broker). Good places to start:
+rules, and how to add a strategy, broker, LLM or data API). Good places to start:
 
 - **Strategies that beat random after costs** — longer holds, market-regime
   filters, the "pickier" fly-brain variant, monthly momentum portfolios.
 - **Data:** per-stock Google News, NSE bulk/block deals, delivery %, FII/DII flows.
 - **Brokers:** Upstox, Groww, Fyers, ICICI Direct, 5paisa as plugins.
+- **LLMs:** plugins for APIs that aren't OpenAI-compatible; prompts that work
+  well with small local models.
 - **Verify a connector** with your own account (read-only first).
 - **Tests and UI polish.**
 
@@ -563,14 +599,16 @@ Please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
   Check `git status` before pushing a fork.
 - The API never returns secret values; logs record key *names* only.
 - The backend listens on `127.0.0.1` only — don't expose it without authentication.
-- Live orders need three separate switches and pass the autopilot's guardrails.
+- Agents trade on paper. The unsupported real-order path needs three separate
+  switches, all off by default.
 - Report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
 
 ---
 
 ## License and credits
 
-Tradeo is MIT-licensed (see [LICENSE](LICENSE)).
+Tradeo is MIT-licensed (see [LICENSE](LICENSE)). It is for paper trading and
+education only — see the [disclaimer](DISCLAIMER.md).
 
 - Research engine: [Vibe-Trading](https://github.com/HKUDS/Vibe-Trading), MIT —
   `backend/research/LICENSE-vibe-trading`

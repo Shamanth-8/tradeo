@@ -239,7 +239,8 @@ class Settings:
             "openai": self.openai_api_key,
             "openrouter": self.openrouter_api_key,
             "custom": self.cloud_api_key_custom,
-        }.get(self.cloud_provider)
+        # LLM plugins (ai/providers/plugins/) read the generic CLOUD_* keys.
+        }.get(self.cloud_provider, self.cloud_api_key_custom)
 
     def as_dict(self) -> dict[str, Any]:
         """Redacted view, safe to expose over the API."""
@@ -275,7 +276,7 @@ class Settings:
             "openai": self.openai_model,
             "openrouter": self.openrouter_model,
             "custom": self.cloud_model,
-        }.get(self.cloud_provider, self.openrouter_model)
+        }.get(self.cloud_provider, self.cloud_model)
 
 
 @lru_cache(maxsize=1)
